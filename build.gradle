@@ -1,0 +1,77 @@
+plugins {
+    id 'java'
+    id 'net.neoforged.moddev' version '2.0.140'
+}
+
+version = project.mod_version
+group = project.maven_group
+
+base {
+    archivesName = project.mod_id
+}
+
+java {
+    toolchain.languageVersion = JavaLanguageVersion.of(21)
+}
+
+repositories {
+    mavenLocal()
+    maven {
+        name = 'Cjsah'
+        url = 'https://server.cjsah.net:1002/maven/releases/'
+    }
+    maven {
+        name = 'Jared'
+        url = 'https://maven.blamejared.com/'
+    }
+    mavenCentral()
+}
+
+neoForge {
+    version = project.neoforge_version
+
+    runs {
+        client {
+            client()
+        }
+        server {
+            server()
+        }
+    }
+
+    mods {
+        "${project.mod_id}" {
+            sourceSet(sourceSets.main)
+        }
+    }
+}
+
+dependencies {
+    compileOnly "dev.dubhe:anvilcraft-neoforge-1.21.1:${project.anvilcraft_version}"
+    compileOnly("dev.anvilcraft.lib:anvillib-ui-neoforge-1.21.1:${project.anvillib_ui_version}") {
+        transitive = false
+    }
+    compileOnly "mezz.jei:jei-1.21.1-neoforge:${project.jei_version}"
+
+    runtimeOnly "dev.dubhe:anvilcraft-neoforge-1.21.1:${project.anvilcraft_version}"
+    runtimeOnly "mezz.jei:jei-1.21.1-neoforge:${project.jei_version}"
+}
+
+tasks.withType(JavaCompile).configureEach {
+    options.encoding = 'UTF-8'
+    options.release = 21
+}
+
+processResources {
+    def props = [
+        mod_id           : project.mod_id,
+        mod_version      : project.mod_version,
+        mod_name         : project.mod_name,
+        mod_authors      : project.mod_authors,
+        mod_description  : project.mod_description
+    ]
+    inputs.properties props
+    filesMatching('META-INF/neoforge.mods.toml') {
+        expand props
+    }
+}

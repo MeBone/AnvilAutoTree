@@ -1,0 +1,13 @@
+{
+  "required": false,
+  "minVersion": "0.8.5",
+  "package": "dev.lanhuo.anvilautocraft.mixin",
+  "compatibilityLevel": "JAVA_21",
+  "plugin": "dev.lanhuo.anvilautocraft.mixin.AutoCraftMixinPlugin",
+  "client": [
+    "JeiRecipeTransferManagerMixin"
+  ],
+  "injectors": {
+    "defaultRequire": 1
+  }
+}
