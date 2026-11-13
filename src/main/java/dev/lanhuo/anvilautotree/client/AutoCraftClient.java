@@ -1,5 +1,7 @@
 package dev.lanhuo.anvilautotree.client;
 
+import com.mojang.datafixers.util.Either;
+import dev.dubhe.anvilcraft.recipe.multiblock.IMultiblockRecipe;
 import dev.lanhuo.anvilautotree.AnvilAutoTree;
 import dev.lanhuo.anvilautotree.net.CraftRequestPayload;
 import dev.lanhuo.anvilautotree.net.CraftResponsePayload;
@@ -57,13 +59,36 @@ public final class AutoCraftClient {
         Player player,
         Function<Player, IRecipeTransferError> transfer
     ) {
+        plan(container, Either.left(sourcePos), recipe, player, transfer);
+    }
+
+    static void planPickBlock(UUID storageId, RecipeHolder<?> recipe, Player player) {
+        plan(player.inventoryMenu, Either.right(storageId), recipe, player, null);
+        Minecraft.getInstance().setScreen(new CraftTreePickScreen());
+    }
+
+    static void onPickScreenClosed() {
+        if (pending != null && pending.pickBlock()) clear();
+    }
+
+    static boolean canStartPickBlock() {
+        return pending == null;
+    }
+
+    private static void plan(
+        AbstractContainerMenu container,
+        Either<BlockPos, UUID> source,
+        RecipeHolder<?> recipe,
+        Player player,
+        Function<Player, IRecipeTransferError> transfer
+    ) {
         if (pending != null) {
             if (confirmed || (pending.container() == container && pending.recipe().id().equals(recipe.id()) && !planFailed)) {
                 return;
             }
             clear();
         }
-        pending = new Pending(container, transfer, recipe, sourcePos);
+        pending = new Pending(container, transfer, recipe, source);
         requestId = ++requestSequence;
         sendPlan();
         player.displayClientMessage(Component.translatable("anvilautotree.status.planning"), true);
@@ -89,7 +114,7 @@ public final class AutoCraftClient {
 
     private static void sendRequest(Optional<UUID> storageId) {
         PacketDistributor.sendToServer(new CraftRequestPayload(
-            pending.sourcePos(), pending.recipe().id(), pending.recipe().value() instanceof StonecutterRecipe,
+            pending.source(), pending.recipe().id(), pending.recipe().value() instanceof StonecutterRecipe,
             storageId, quantity, requestId
         ));
     }
@@ -121,6 +146,10 @@ public final class AutoCraftClient {
         if (pending == null) {
             return;
         }
+        if (pending.pickBlock()) {
+            if (!(newScreen instanceof CraftTreePickScreen)) clear();
+            return;
+        }
         if (newScreen instanceof AbstractContainerScreen<?> containerScreen && containerScreen.getMenu() == pending.container()) {
             return;
         }
@@ -149,7 +178,7 @@ public final class AutoCraftClient {
                     false
                 );
             }
-            clear();
+            cancel();
             return;
         }
         if (replayDelay < 0) {
@@ -202,7 +231,7 @@ public final class AutoCraftClient {
             CraftTreeOverlay.LIVE.show(payload.tree(), message, canConfirm, payload.storage().kind(), quantity,
                 AutoCraftClient::changeQuantity, AutoCraftClient::confirm, AutoCraftClient::cancel);
         }
-        CraftTreeOverlay.LIVE.setSingleStructure(pending.transfer() == null);
+        CraftTreeOverlay.LIVE.setDelivery(pending.recipe().value() instanceof IMultiblockRecipe, pending.pickBlock());
         if (!payload.success()) {
             // 失败时没有可执行的作业：标记为已结束，玩家补好材料后再点「+」会重新规划。
             planFailed = true;
@@ -217,6 +246,10 @@ public final class AutoCraftClient {
         Minecraft minecraft = Minecraft.getInstance();
         if (minecraft.player != null) {
             minecraft.player.displayClientMessage(payload.message(), !payload.success());
+        }
+        if (pending.pickBlock()) {
+            cancel();
+            return;
         }
         if (payload.success() && pending.transfer() == null && minecraft.screen instanceof
             dev.dubhe.anvilcraft.client.gui.screen.StorageScreen screen && screen.getMenu() == pending.container()) {
@@ -245,6 +278,10 @@ public final class AutoCraftClient {
 
     private static void cancel() {
         clear();
+        Minecraft minecraft = Minecraft.getInstance();
+        if (minecraft.screen instanceof CraftTreePickScreen) {
+            minecraft.setScreen(null);
+        }
     }
 
     private static void clear() {
@@ -264,7 +301,10 @@ public final class AutoCraftClient {
         AbstractContainerMenu container,
         Function<Player, IRecipeTransferError> transfer,
         RecipeHolder<?> recipe,
-        BlockPos sourcePos
+        Either<BlockPos, UUID> source
     ) {
+        boolean pickBlock() {
+            return source.right().isPresent();
+        }
     }
 }

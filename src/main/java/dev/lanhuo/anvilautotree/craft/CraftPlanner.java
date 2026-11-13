@@ -50,7 +50,7 @@ public final class CraftPlanner {
         this.storage = storage;
     }
 
-    public static CraftPlan plan(ServerLevel level, StorageAccess storage, RecipeHolder<?> target, boolean stonecutter, int quantity) {
+    public static CraftPlan plan(ServerLevel level, StorageAccess storage, RecipeHolder<?> target, boolean stonecutter, int quantity, boolean produceTarget) {
         CraftPlanner planner = new CraftPlanner(level, storage);
         ItemStack output = target.value().getResultItem(level.registryAccess());
         List<Component> preview = new ArrayList<>();
@@ -59,19 +59,19 @@ public final class CraftPlanner {
         if (root.isEmpty() || output.isEmpty()) {
             return CraftPlan.unsupported(preview);
         }
-        if (quantity > 1) {
+        if (produceTarget) {
             output = planner.batchOutput(target.value(), root);
             if (output.isEmpty()) {
                 return new CraftPlan(List.of(), preview,
                     List.of(Component.translatable("anvilautotree.error.unsupported_batch")), false, null);
             }
         }
-        return planner.planMaterials(target, stonecutter, quantity, output, root, preview, quantity > 1);
+        return planner.planMaterials(target, stonecutter, quantity, output, root, preview, produceTarget);
     }
 
-    static CraftPlan planStructure(ServerLevel level, StorageAccess storage, RecipeHolder<?> recipe, ItemStack icon,
+    static CraftPlan planStructure(ServerLevel level, StorageAccess storage, RecipeHolder<?> recipe, ItemStack icon, int quantity,
                                    List<IngredientChoice> materials) {
-        return new CraftPlanner(level, storage).planMaterials(recipe, false, 1, icon, materials, List.of(), false);
+        return new CraftPlanner(level, storage).planMaterials(recipe, false, quantity, icon, materials, List.of(), false);
     }
 
     private CraftPlan planMaterials(RecipeHolder<?> target, boolean stonecutter, int quantity, ItemStack output,
@@ -92,7 +92,6 @@ public final class CraftPlanner {
             }
             try {
                 rootChildren.add(this.ensure(key, required));
-                this.reserved.merge(key, required, Long::sum);
             } catch (MissingRecipeException exception) {
                 errors.add(exception.toComponent());
                 rootChildren.add(exception.missingNode());
@@ -121,7 +120,7 @@ public final class CraftPlanner {
             (long) output.getCount() * quantity,
             this.initialCount(StackKey.of(output)),
             produceTarget ? quantity : 0,
-            false,
+            !errors.isEmpty(),
             rootChildren
         );
         return new CraftPlan(this.steps, preview, errors, true, tree);
@@ -168,11 +167,23 @@ public final class CraftPlanner {
 
     private CraftTreeNode ensure(StackKey key, long required) {
         long available = this.available(key);
-        long stored = this.initialCount(key);
-        if (available >= required) {
-            return CraftTreeNode.leaf(key.proto(), required, stored);
+        long fromStock = Math.min(required, available);
+        this.reserved.merge(key, fromStock, Long::sum);
+        if (fromStock == required) {
+            return CraftTreeNode.leaf(key.proto(), required, available);
         }
-        return this.craft(key, required, required - available, stored);
+
+        // Keep the stock counted towards this ingredient reserved while its recipes are explored.
+        // Otherwise a child can consume that same stock and return it through a conversion cycle.
+        long missing = required - fromStock;
+        try {
+            CraftTreeNode node = this.craft(key, required, missing, available);
+            this.reserved.merge(key, missing, Long::sum);
+            return node;
+        } catch (MissingRecipeException | TooComplexException exception) {
+            this.reserved.merge(key, -fromStock, Long::sum);
+            throw exception;
+        }
     }
 
     private CraftTreeNode craft(StackKey key, long required, long missing, long stored) {
@@ -203,7 +214,6 @@ public final class CraftPlanner {
                     for (Map.Entry<StackKey, Integer> entry : aggregate(candidate.ingredients()).entrySet()) {
                         long need = (long) entry.getValue() * crafts;
                         children.add(this.ensure(entry.getKey(), need));
-                        this.reserved.merge(entry.getKey(), need, Long::sum);
                     }
                     this.produced.merge(key, candidate.output().getCount() * crafts, Long::sum);
                     this.steps.add(new CraftStep(
@@ -217,6 +227,9 @@ public final class CraftPlanner {
                 } catch (MissingRecipeException exception) {
                     this.restore(snapshot);
                     failure = exception.under(key, required, stored);
+                } catch (TooComplexException exception) {
+                    this.restore(snapshot);
+                    throw exception;
                 }
             }
             throw failure != null ? failure : MissingRecipeException.leaf(key, false, required, stored);

@@ -11,7 +11,7 @@ import net.neoforged.neoforge.network.registration.PayloadRegistrar;
  * 网络负载注册。
  */
 public final class ModPayloads {
-    private static final String PROTOCOL_VERSION = "5";
+    private static final String PROTOCOL_VERSION = "6";
 
     private ModPayloads() {
     }

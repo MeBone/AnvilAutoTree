@@ -1,7 +1,6 @@
 package dev.lanhuo.anvilautotree.client;
 
 import dev.lanhuo.anvilautotree.net.CraftNodePayload;
-import dev.lanhuo.anvilautotree.net.CraftRequestPayload;
 import dev.lanhuo.anvilautotree.net.StorageKind;
 import java.util.ArrayList;
 import java.util.HashMap;
@@ -41,7 +40,7 @@ public final class CraftTreeOverlay {
     private static final int HEADER = 30;
     private static final int FOOTER = 26;
     private static final int FOOTER_GAP = 4;
-    private static final int QUANTITY_WIDTH = 32;
+    private static final int QUANTITY_WIDTH = 36;
     private static final int BUTTON_HEIGHT = 18;
     private static final int CLOSE_WIDTH = 18;
     private static final int CLOSE_HEIGHT = 20;
@@ -91,7 +90,8 @@ public final class CraftTreeOverlay {
         "anvilautotree.gui.title.crate", 0xFFCFB595, 0xFFD8AD77, 0xFFF1D3AA, 0xFF8A603B, 0xFFAD9478, 0xFFE9C18C
     );
     private Theme theme = HYPERDIMENSION;
-    private boolean singleStructure;
+    private boolean structurePacking;
+    private boolean pickBlock;
     private StorageKind storageKind = StorageKind.HYPERDIMENSION;
 
     private boolean visible;
@@ -182,7 +182,9 @@ public final class CraftTreeOverlay {
         List<CraftNodePayload> payloads, Component status, boolean canConfirm, StorageKind kind, int quantity,
         IntConsumer changeQuantity, Runnable confirm, Runnable cancel
     ) {
-        singleStructure = false;
+        structurePacking = false;
+        pickBlock = false;
+        storageKind = kind;
         onQuantityChanged = changeQuantity;
         onConfirm = confirm;
         onCancel = cancel;
@@ -211,15 +213,15 @@ public final class CraftTreeOverlay {
     private void initQuantityInput(int initialValue) {
         footer = null;
         quantityInput = new EditBox(Minecraft.getInstance().font, 0, 0, QUANTITY_WIDTH, BUTTON_HEIGHT,
-            Component.translatable("anvilautotree.gui.quantity_hint", CraftRequestPayload.MAX_QUANTITY));
-        quantityInput.setMaxLength(2);
+            Component.translatable("anvilautotree.gui.quantity_hint", storageKind.maxOrderQuantity()));
+        quantityInput.setMaxLength(4);
         quantityInput.setFilter(value -> value.chars().allMatch(character -> character >= '0' && character <= '9'));
         quantityInput.setValue(Integer.toString(initialValue));
         quantityInput.setEditable(!layoutPreview);
         validQuantityInput = true;
         quantityInput.setResponder(value -> {
             int number = value.isEmpty() ? 0 : Integer.parseInt(value);
-            validQuantityInput = number >= 1 && number <= CraftRequestPayload.MAX_QUANTITY;
+            validQuantityInput = number >= 1 && number <= storageKind.maxOrderQuantity();
             quantityInput.setTextColor(validQuantityInput ? 0xFFECECF4 : 0xFFFF8989);
             if (validQuantityInput && number != quantity) {
                 onQuantityChanged.accept(number);
@@ -257,9 +259,9 @@ public final class CraftTreeOverlay {
         }
     }
 
-    void setSingleStructure(boolean singleStructure) {
-        this.singleStructure = singleStructure;
-        quantityInput.setEditable(!layoutPreview && !singleStructure && storageKind.supportsBatch());
+    void setDelivery(boolean structurePacking, boolean pickBlock) {
+        this.structurePacking = structurePacking;
+        this.pickBlock = pickBlock;
     }
 
     public void markPlanning(int quantity) {
@@ -646,9 +648,9 @@ public final class CraftTreeOverlay {
         lines.add(node.stack().getHoverName());
         lines.add(Component.translatable("anvilautotree.gui.node_required", node.required()));
         lines.add(Component.translatable("anvilautotree.gui.node_stored", node.stored()));
-        if (isMissing(node)) {
+        if (isMissing(node) && hovered != root) {
             lines.add(Component.translatable("anvilautotree.gui.node_missing", Math.max(0L, node.required() - node.stored())));
-        } else if (node.crafts() > 0) {
+        } else if (!isMissing(node) && node.crafts() > 0) {
             lines.add(Component.translatable("anvilautotree.gui.node_crafts", node.crafts()));
         }
         graphics.renderTooltip(font, lines, Optional.empty(), mouseX, mouseY);
@@ -708,7 +710,7 @@ public final class CraftTreeOverlay {
     }
 
     private void renderFooter(GuiGraphics graphics, Font font, int mouseX, int mouseY) {
-        renderButton(graphics, font, singleStructure ? "anvilautotree.gui.structure_pack" : quantity > 1 ? "anvilautotree.gui.confirm_batch" : "anvilautotree.gui.confirm",
+        renderButton(graphics, font, structurePacking ? "anvilautotree.gui.structure_pack" : quantity > 1 ? "anvilautotree.gui.confirm_batch" : "anvilautotree.gui.confirm",
             footer.confirm(), mouseX, mouseY, !layoutPreview && confirmEnabled && validQuantityInput && !busy, false,
             0);
         quantityInput.render(graphics, mouseX, mouseY, 0);
@@ -717,12 +719,15 @@ public final class CraftTreeOverlay {
         renderButton(graphics, font, "anvilautotree.gui.cancel", footer.cancel(), mouseX, mouseY, !layoutPreview, false,
             2);
         if (!layoutPreview && inRect(mouseX, mouseY, footer.quantity())) {
-            graphics.renderTooltip(font, singleStructure ? Component.translatable("anvilautotree.gui.structure_single") : storageKind.supportsBatch()
-                ? Component.translatable("anvilautotree.gui.quantity_hint", CraftRequestPayload.MAX_QUANTITY)
+            graphics.renderTooltip(font, storageKind.supportsBatch()
+                ? Component.translatable("anvilautotree.gui.quantity_hint", storageKind.maxOrderQuantity())
                 : Component.translatable("anvilautotree.error.crate_single_only"), mouseX, mouseY);
         } else if (!layoutPreview && inRect(mouseX, mouseY, footer.confirm())) {
             graphics.renderTooltip(font, Component.translatable(
-                singleStructure ? "anvilautotree.gui.structure_pack_hint" : quantity > 1 ? "anvilautotree.gui.batch_hint" : "anvilautotree.gui.confirm_hint"), mouseX, mouseY);
+                structurePacking
+                    ? (pickBlock ? "anvilautotree.gui.structure_inventory_hint" : "anvilautotree.gui.structure_pack_hint")
+                    : (pickBlock ? "anvilautotree.gui.pick_hint"
+                        : quantity > 1 ? "anvilautotree.gui.batch_hint" : "anvilautotree.gui.confirm_hint")), mouseX, mouseY);
         }
     }
 
@@ -802,7 +807,7 @@ public final class CraftTreeOverlay {
         boolean validBeforeClick = validQuantityInput;
         if (!layoutPreview && inRect(mouseX, mouseY, footer.quantity())) {
             pressConsumed = true;
-            if (singleStructure || !storageKind.supportsBatch()) {
+            if (!storageKind.supportsBatch()) {
                 return true;
             }
             boolean alreadyFocused = quantityInput.isFocused();

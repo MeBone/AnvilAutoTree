@@ -1,6 +1,5 @@
 package dev.lanhuo.anvilautotree.craft;
 
-import dev.dubhe.anvilcraft.saved.storage.BaseStorage;
 import dev.dubhe.anvilcraft.recipe.multiblock.IMultiblockRecipe;
 import dev.dubhe.anvilcraft.recipe.multiblock.MultiblockRecipe;
 import dev.dubhe.anvilcraft.recipe.multiblock.MultiblockConversionRecipe;
@@ -28,19 +27,23 @@ public final class CraftService {
 
     public static void handle(ServerPlayer player, CraftRequestPayload payload) {
         ServerLevel level = (ServerLevel) player.level();
-        Optional<BaseStorage<?>> resolved = StorageLookup.resolve(player, payload.sourcePos());
+        var sourcePos = payload.source().left().orElse(null);
+        if (player.isSpectator() || (payload.pickBlock() && player.hasInfiniteMaterials())) {
+            return;
+        }
+        var resolved = StorageLookup.resolve(player, payload.source());
         if (resolved.isEmpty()) {
             fail(player, payload, "anvilautotree.error.no_storage", StorageKind.HYPERDIMENSION);
             return;
         }
-        BaseStorage<?> storage = resolved.get();
+        var storage = resolved.get();
         StorageKind kind = StorageLookup.kindOf(storage).orElseThrow();
         if (!kind.supportsBatch() && payload.quantity() > 1) {
             fail(player, payload, "anvilautotree.error.crate_single_only", kind);
             return;
         }
-        if (payload.quantity() < 1 || payload.quantity() > CraftRequestPayload.MAX_QUANTITY) {
-            fail(player, payload, "anvilautotree.error.invalid_quantity", kind);
+        if (payload.quantity() < 1 || payload.quantity() > kind.maxOrderQuantity()) {
+            fail(player, payload, Component.translatable("anvilautotree.error.invalid_quantity", kind.maxOrderQuantity()), kind);
             return;
         }
         if (payload.execute() && !payload.storageId().orElseThrow().equals(storage.getId())) {
@@ -57,11 +60,17 @@ public final class CraftService {
             return;
         }
         RecipeHolder<?> recipe = found.get();
-        StorageAccess access = new InventoryAwareStorageAccess(new ItemHandlerStorageAccess(storage.getItems()), player);
+        StorageAccess stock = new ItemHandlerStorageAccess(storage.getItems());
+        var result = recipe.value().getResultItem(level.registryAccess());
+        if (payload.pickBlock() && !result.isEmpty() && stock.count(result) > 0) {
+            fail(player, payload, "anvilautotree.error.pick_stock", kind);
+            return;
+        }
+        StorageAccess access = new InventoryAwareStorageAccess(stock, player);
         StructurePacking packing = null;
         CraftPlan plan;
         if (recipe.value() instanceof IMultiblockRecipe) {
-            if (kind == StorageKind.LARGE_CRATE || payload.quantity() != 1) {
+            if (kind == StorageKind.LARGE_CRATE) {
                 fail(player, payload, "anvilautotree.error.structure_storage", kind);
                 return;
             }
@@ -70,8 +79,8 @@ public final class CraftService {
                 return;
             }
             try {
-                packing = StructurePacking.prepare(recipe.value(), player, access);
-                Component problem = packing.check(player, payload.sourcePos(), access);
+                packing = StructurePacking.prepare(recipe.value(), player, access, payload.quantity(), payload.pickBlock());
+                Component problem = packing.check(player, sourcePos, access);
                 if (problem != null) {
                     fail(player, payload, problem, kind);
                     return;
@@ -79,15 +88,18 @@ public final class CraftService {
             } catch (StructurePacking.UnpackableMaterial exception) {
                 fail(player, payload, "anvilautotree.error.structure_unpackable", kind);
                 return;
+            } catch (StructurePacking.TooManyMaterials exception) {
+                fail(player, payload, payload.pickBlock() ? "anvilautotree.error.structure_inventory_size" : "anvilautotree.error.structure_size", kind);
+                return;
             } catch (ReflectiveOperationException | RuntimeException exception) {
                 fail(player, payload, "anvilautotree.error.structure_grid", kind);
                 return;
             }
-            var icon = recipe.value().getResultItem(level.registryAccess());
-            if (icon.isEmpty()) icon = Items.SHULKER_BOX.getDefaultInstance();
-            plan = CraftPlanner.planStructure(level, access, recipe, icon, packing.materials());
+            var icon = result.isEmpty() ? Items.SHULKER_BOX.getDefaultInstance() : result;
+            plan = CraftPlanner.planStructure(level, access, recipe, icon, payload.quantity(), packing.materials());
         } else {
-            plan = CraftPlanner.plan(level, access, recipe, payload.stonecutter(), payload.quantity());
+            plan = CraftPlanner.plan(level, access, recipe, payload.stonecutter(), payload.quantity(),
+                payload.pickBlock() || payload.quantity() > 1);
         }
         if (!payload.execute()) {
             PacketDistributor.sendToPlayer(
@@ -122,8 +134,13 @@ public final class CraftService {
             return;
         }
         StructurePacking structure = packing;
-        CraftJobManager.submit(new CraftJob(player, access, plan.steps(), kind, payload.requestId(), payload.quantity(),
-            structure == null ? null : () -> structure.finish(player, payload.sourcePos(), storage, access)));
+        CraftJobManager.submit(new CraftJob(player, access, plan.steps(), kind, payload.requestId(), payload.quantity(), payload.pickBlock(),
+            structure == null ? null : () -> {
+                if (StorageLookup.resolve(player, payload.source()).filter(current -> current == storage).isEmpty()) {
+                    return Component.translatable("anvilautotree.error.storage_changed");
+                }
+                return structure.finish(player, sourcePos, access);
+            }));
         PacketDistributor.sendToPlayer(player, CraftResponsePayload.accepted(payload.requestId()));
     }
 

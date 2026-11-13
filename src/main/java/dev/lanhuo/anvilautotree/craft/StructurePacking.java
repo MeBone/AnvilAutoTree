@@ -1,12 +1,10 @@
 package dev.lanhuo.anvilautotree.craft;
 
-import dev.dubhe.anvilcraft.saved.storage.BaseStorage;
 import dev.dubhe.anvilcraft.recipe.multiblock.MultiblockConversionRecipe;
 import dev.dubhe.anvilcraft.recipe.multiblock.MultiblockRecipe;
 import dev.dubhe.anvilcraft.recipe.multiblock.MultiblockUtil;
 import dev.lanhuo.anvilautotree.AnvilAutoTree;
 import dev.lanhuo.anvilautotree.storage.StorageCraftingGrid;
-import dev.lanhuo.anvilautotree.storage.StorageLookup;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -14,6 +12,7 @@ import net.minecraft.core.BlockPos;
 import net.minecraft.core.component.DataComponents;
 import net.minecraft.network.chat.Component;
 import net.minecraft.server.level.ServerPlayer;
+import net.minecraft.world.entity.player.Inventory;
 import net.minecraft.world.item.BlockItem;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.Items;
@@ -29,13 +28,17 @@ final class StructurePacking {
 
     private final List<IngredientChoice> materials;
     private final List<ItemStack> stacks;
+    private final int quantity;
+    private final boolean toInventory;
 
-    private StructurePacking(List<IngredientChoice> materials, List<ItemStack> stacks) {
+    private StructurePacking(List<IngredientChoice> materials, List<ItemStack> stacks, int quantity, boolean toInventory) {
         this.materials = List.copyOf(materials);
         this.stacks = List.copyOf(stacks);
+        this.quantity = quantity;
+        this.toInventory = toInventory;
     }
 
-    static StructurePacking prepare(Recipe<?> recipe, ServerPlayer player, StorageAccess access) {
+    static StructurePacking prepare(Recipe<?> recipe, ServerPlayer player, StorageAccess access, int quantity, boolean toInventory) {
         var pattern = switch (recipe) {
             case MultiblockRecipe crafting -> crafting.getPattern();
             case MultiblockConversionRecipe conversion -> conversion.getInputPattern();
@@ -50,24 +53,28 @@ final class StructurePacking {
                 .getTag(entry.getKey()).orElseThrow();
             var choice = options.stream().map(block -> new ItemStack(block.value().asItem()))
                 .filter(StructurePacking::canPack)
-                .max(java.util.Comparator.comparingLong(stack -> access.count(stack) - totals.getOrDefault(StackKey.of(stack), 0L)))
+                .max(java.util.Comparator.comparingLong(stack ->
+                    access.count(stack) - totals.getOrDefault(StackKey.of(stack), 0L) * quantity))
                 .orElseThrow(UnpackableMaterial::new);
             totals.merge(StackKey.of(choice), (long) entry.getValue(), Long::sum);
         }
         var materials = new ArrayList<IngredientChoice>();
         var stacks = new ArrayList<ItemStack>();
+        int maxBoxes = toInventory ? Inventory.INVENTORY_SIZE : GRID_SLOTS;
         totals.forEach((key, count) -> {
             ItemStack stack = key.proto();
             if (!canPack(stack)) throw new UnpackableMaterial();
-            if (count > (long) BOX_SLOTS * GRID_SLOTS * stack.getMaxStackSize()) throw new IllegalArgumentException("Too many materials");
+            long total = count * quantity;
+            long neededSlots = Math.ceilDiv(total, stack.getMaxStackSize());
+            if (neededSlots > BOX_SLOTS * maxBoxes - stacks.size()) throw new TooManyMaterials();
             materials.add(new IngredientChoice(key, Math.toIntExact(count)));
-            for (long remaining = count; remaining > 0;) {
+            for (long remaining = total; remaining > 0;) {
                 int amount = (int) Math.min(remaining, stack.getMaxStackSize());
                 stacks.add(stack.copyWithCount(amount));
                 remaining -= amount;
             }
         });
-        return new StructurePacking(materials, stacks);
+        return new StructurePacking(materials, stacks, quantity, toInventory);
     }
 
     private static boolean canPack(ItemStack stack) {
@@ -76,6 +83,9 @@ final class StructurePacking {
     }
 
     static final class UnpackableMaterial extends RuntimeException {
+    }
+
+    static final class TooManyMaterials extends RuntimeException {
     }
 
     List<IngredientChoice> materials() {
@@ -90,7 +100,7 @@ final class StructurePacking {
         if (!stacks.stream().allMatch(StructurePacking::canPack)) {
             return Component.translatable("anvilautotree.error.structure_unpackable");
         }
-        if (boxes() == 0 || boxes() > GRID_SLOTS) {
+        if (boxes() == 0) {
             return Component.translatable("anvilautotree.error.structure_size");
         }
         int available = 0;
@@ -100,24 +110,19 @@ final class StructurePacking {
         if (available < boxes()) {
             return Component.translatable("anvilautotree.error.structure_boxes", boxes() - available);
         }
+        if (toInventory) return null;
         var grid = StorageCraftingGrid.resolve(player, pos).orElse(null);
         if (grid == null) return Component.translatable("anvilautotree.error.structure_grid");
         long slots = grid.read().craftingInput().stream().filter(ItemStack::isEmpty).count();
         return slots < boxes() ? Component.translatable("anvilautotree.error.structure_slots", boxes() - slots) : null;
     }
 
-    Component finish(ServerPlayer player, BlockPos pos, BaseStorage<?> storage, StorageAccess access) {
-        if (StorageLookup.resolve(player, pos).filter(current -> current == storage).isEmpty()) {
-            return Component.translatable("anvilautotree.error.storage_changed");
-        }
+    Component finish(ServerPlayer player, BlockPos pos, StorageAccess access) {
         var removed = new ArrayList<ItemStack>();
         boolean committed = false;
         try {
             Component error = check(player, pos, access);
             if (error != null) return error;
-            var target = StorageCraftingGrid.resolve(player, pos).orElseThrow();
-            var grid = target.read();
-            var slots = new ArrayList<>(grid.craftingInput());
             var boxes = new ArrayList<ItemStack>();
             for (var box : EMPTY_BOXES) {
                 int taken = access.extract(box, boxes() - boxes.size(), false);
@@ -128,19 +133,39 @@ final class StructurePacking {
             if (boxes.size() != boxes()) return Component.translatable("anvilautotree.error.structure_boxes", boxes() - boxes.size());
             for (var material : materials) {
                 var stack = material.key().proto();
-                int taken = access.extract(stack, material.perCraft(), false);
+                int required = material.perCraft() * quantity;
+                int taken = access.extract(stack, required, false);
                 if (taken > 0) removed.add(stack.copyWithCount(taken));
-                if (taken != material.perCraft()) return Component.translatable("anvilautotree.status.failed");
+                if (taken != required) return Component.translatable("anvilautotree.status.failed");
             }
-            int slot = 0;
             for (int index = 0; index < boxes.size(); index++) {
-                while (!slots.get(slot).isEmpty()) slot++;
-                ItemStack box = boxes.get(index);
-                box.set(DataComponents.CONTAINER, ItemContainerContents.fromItems(
+                boxes.get(index).set(DataComponents.CONTAINER, ItemContainerContents.fromItems(
                     stacks.subList(index * BOX_SLOTS, Math.min(stacks.size(), (index + 1) * BOX_SLOTS))));
-                slots.set(slot++, box);
             }
-            target.write(grid.withCraftingInput(slots));
+            if (toInventory) {
+                var inventory = player.getInventory();
+                var slots = new ArrayList<Integer>();
+                for (int slot = 0; slot < Inventory.INVENTORY_SIZE && slots.size() < boxes.size(); slot++) {
+                    if (inventory.getItem(slot).isEmpty()) slots.add(slot);
+                }
+                if (slots.size() < boxes.size()) {
+                    return Component.translatable("anvilautotree.error.structure_inventory_slots", boxes.size() - slots.size());
+                }
+                for (int index = 0; index < boxes.size(); index++) {
+                    inventory.setItem(slots.get(index), boxes.get(index));
+                }
+                inventory.setChanged();
+            } else {
+                var target = StorageCraftingGrid.resolve(player, pos).orElseThrow();
+                var grid = target.read();
+                var slots = new ArrayList<>(grid.craftingInput());
+                int slot = 0;
+                for (var box : boxes) {
+                    while (!slots.get(slot).isEmpty()) slot++;
+                    slots.set(slot++, box);
+                }
+                target.write(grid.withCraftingInput(slots));
+            }
             committed = true;
             return null;
         } catch (ReflectiveOperationException | RuntimeException exception) {
@@ -150,7 +175,8 @@ final class StructurePacking {
             if (!committed) {
                 for (var stack : removed) {
                     ItemStack remainder = access.insert(stack);
-                    if (!remainder.isEmpty() && !player.getInventory().add(remainder)) player.drop(remainder, false);
+                    if (!remainder.isEmpty()) player.getInventory().add(remainder);
+                    if (!remainder.isEmpty()) player.drop(remainder, false);
                 }
             }
         }

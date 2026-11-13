@@ -42,19 +42,7 @@ public final class ItemHandlerStorageAccess implements StorageAccess {
             if (stack.isEmpty() || !ItemStack.isSameItemSameComponents(stack, proto)) {
                 continue;
             }
-            int available = (int) Math.min(remaining, this.handler.getAmountAsLong(slot));
-            while (available > 0) {
-                int take = Math.min(available, stack.getMaxStackSize());
-                ItemStack extracted = this.handler.extractItem(slot, take, false);
-                if (extracted.isEmpty()) {
-                    break;
-                }
-                remaining -= extracted.getCount();
-                available -= extracted.getCount();
-                if (extracted.getCount() < take) {
-                    break;
-                }
-            }
+            remaining -= this.handler.extractUnlimited(slot, remaining, false).getCount();
         }
         return amount - remaining;
     }

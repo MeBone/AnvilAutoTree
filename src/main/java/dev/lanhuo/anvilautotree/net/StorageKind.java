@@ -5,9 +5,9 @@ import net.minecraft.network.codec.StreamCodec;
 import io.netty.buffer.ByteBuf;
 
 public enum StorageKind {
-    HYPERDIMENSION(1),
-    SHULKER(12),
-    LARGE_CRATE(144);
+    HYPERDIMENSION(1, 1024),
+    SHULKER(12, 64),
+    LARGE_CRATE(144, 1);
 
     public static final StreamCodec<ByteBuf, StorageKind> STREAM_CODEC = ByteBufCodecs.VAR_INT.map(
         index -> index >= 0 && index < values().length ? values()[index] : HYPERDIMENSION,
@@ -16,8 +16,11 @@ public enum StorageKind {
 
     private final int divisor;
 
-    StorageKind(int divisor) {
+    private final int maxOrderQuantity;
+
+    StorageKind(int divisor, int maxOrderQuantity) {
         this.divisor = divisor;
+        this.maxOrderQuantity = maxOrderQuantity;
     }
 
     public int craftsPerTick(int baseParallelism) {
@@ -25,6 +28,10 @@ public enum StorageKind {
     }
 
     public boolean supportsBatch() {
-        return this != LARGE_CRATE;
+        return this.maxOrderQuantity > 1;
+    }
+
+    public int maxOrderQuantity() {
+        return this.maxOrderQuantity;
     }
 }

@@ -1,5 +1,6 @@
 package dev.lanhuo.anvilautotree.net;
 
+import com.mojang.datafixers.util.Either;
 import dev.lanhuo.anvilautotree.AnvilAutoTree;
 import java.util.Optional;
 import java.util.UUID;
@@ -14,7 +15,7 @@ import net.minecraft.resources.ResourceLocation;
 /**
  * 客户端请求：对终端中当前展示的配方做一次自动补料。
  *
- * @param sourcePos 终端界面的存储位置（超维终端为虚拟坐标）
+ * @param source 存储界面的位置，或中键取物所用的超维终端绑定
  * @param recipeId 目标配方
  * @param stonecutter 是否为切石机配方
  * @param quantity 目标配方执行次数
@@ -22,16 +23,15 @@ import net.minecraft.resources.ResourceLocation;
  * @param storageId 规划时为空，确认执行时为玩家预览的存储
  */
 public record CraftRequestPayload(
-    BlockPos sourcePos, ResourceLocation recipeId, boolean stonecutter, Optional<UUID> storageId, int quantity, int requestId
+    Either<BlockPos, UUID> source, ResourceLocation recipeId, boolean stonecutter, Optional<UUID> storageId, int quantity, int requestId
 )
     implements CustomPacketPayload {
-    public static final int MAX_QUANTITY = 64;
     public static final Type<CraftRequestPayload> TYPE = new Type<>(
         ResourceLocation.fromNamespaceAndPath(AnvilAutoTree.MOD_ID, "craft_request")
     );
     public static final StreamCodec<RegistryFriendlyByteBuf, CraftRequestPayload> STREAM_CODEC = StreamCodec.composite(
-        BlockPos.STREAM_CODEC,
-        CraftRequestPayload::sourcePos,
+        ByteBufCodecs.either(BlockPos.STREAM_CODEC, UUIDUtil.STREAM_CODEC),
+        CraftRequestPayload::source,
         ResourceLocation.STREAM_CODEC,
         CraftRequestPayload::recipeId,
         ByteBufCodecs.BOOL,
@@ -44,6 +44,10 @@ public record CraftRequestPayload(
         CraftRequestPayload::requestId,
         CraftRequestPayload::new
     );
+
+    public boolean pickBlock() {
+        return source.right().isPresent();
+    }
 
     public boolean execute() {
         return storageId.isPresent();

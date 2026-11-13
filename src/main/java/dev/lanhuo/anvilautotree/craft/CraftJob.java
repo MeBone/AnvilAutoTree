@@ -4,6 +4,10 @@ import dev.lanhuo.anvilautotree.net.CraftResponsePayload;
 import dev.lanhuo.anvilautotree.net.StorageKind;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.function.Supplier;
+import net.minecraft.network.protocol.game.ClientboundContainerSetSlotPacket;
+import net.minecraft.network.protocol.game.ClientboundSetCarriedItemPacket;
+import net.minecraft.world.entity.player.Inventory;
 import net.minecraft.network.chat.Component;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.world.item.ItemStack;
@@ -22,18 +26,21 @@ public final class CraftJob {
     private final StorageKind kind;
     private final int requestId;
     private final int quantity;
-    private final java.util.function.Supplier<Component> packing;
+    private final boolean pickBlock;
+    private final Supplier<Component> packing;
+    private boolean deliveredToHand;
     private int stepIndex;
     private int craftsInStep;
     private boolean failed;
 
-    public CraftJob(ServerPlayer player, StorageAccess storage, List<CraftStep> steps, StorageKind kind, int requestId, int quantity, java.util.function.Supplier<Component> packing) {
+    public CraftJob(ServerPlayer player, StorageAccess storage, List<CraftStep> steps, StorageKind kind, int requestId, int quantity, boolean pickBlock, Supplier<Component> packing) {
         this.player = player;
         this.storage = storage;
         this.steps = List.copyOf(steps);
         this.kind = kind;
         this.requestId = requestId;
         this.quantity = quantity;
+        this.pickBlock = pickBlock;
         this.packing = packing;
     }
 
@@ -91,7 +98,11 @@ public final class CraftJob {
         if (!this.failed && packing != null) {
             Component error = packing.get();
             this.failed = error != null;
-            message = this.failed ? error : Component.translatable("anvilautotree.status.structure_packed");
+            message = this.failed ? error : Component.translatable(this.pickBlock
+                ? "anvilautotree.status.structure_inventory_packed" : "anvilautotree.status.structure_packed");
+        } else if (!this.failed && this.pickBlock) {
+            message = Component.translatable(this.deliveredToHand
+                ? "anvilautotree.status.pick_done" : "anvilautotree.status.pick_stored");
         }
         PacketDistributor.sendToPlayer(this.player, CraftResponsePayload.done(!this.failed, message, this.requestId));
     }
@@ -106,8 +117,13 @@ public final class CraftJob {
                 consumed.add(ingredient.key().proto().copyWithCount(extracted));
             }
             if (extracted < amount) {
-                // 中途缺料：把本次已经扣掉的原料原样退回，避免半成品状态
-                consumed.forEach(this::giveBack);
+                // 中途缺料时优先把已经扣掉的原料退回仓储。
+                for (ItemStack stack : consumed) {
+                    while (!stack.isEmpty()) {
+                        ItemStack leftover = this.storage.insert(stack.split(stack.getMaxStackSize()));
+                        if (!leftover.isEmpty()) this.giveBack(leftover);
+                    }
+                }
                 return false;
             }
         }
@@ -123,7 +139,11 @@ public final class CraftJob {
         int chunkSize = Math.max(1, step.output().getMaxStackSize());
         while (remaining > 0) {
             int count = Math.min(remaining, chunkSize);
-            ItemStack leftover = this.storage.insert(step.output().copyWithCount(count));
+            ItemStack output = step.output().copyWithCount(count);
+            if (this.pickBlock && this.packing == null && this.stepIndex == this.steps.size() - 1) {
+                this.deliverToHand(output);
+            }
+            ItemStack leftover = output.isEmpty() ? ItemStack.EMPTY : this.storage.insert(output);
             if (!leftover.isEmpty()) {
                 this.giveBack(leftover);
             }
@@ -131,8 +151,35 @@ public final class CraftJob {
         }
     }
 
+    private void deliverToHand(ItemStack output) {
+        Inventory inventory = this.player.getInventory();
+        if (!this.deliveredToHand) {
+            int slot = inventory.findSlotMatchingItem(output);
+            if (slot < 0) {
+                slot = inventory.getFreeSlot();
+                if (slot < 0) return;
+                inventory.setItem(slot, output.split(output.getMaxStackSize()));
+            }
+            if (Inventory.isHotbarSlot(slot)) {
+                inventory.selected = slot;
+            } else {
+                inventory.pickSlot(slot);
+                this.player.connection.send(new ClientboundContainerSetSlotPacket(-2, 0, slot, inventory.getItem(slot)));
+            }
+            this.player.connection.send(new ClientboundSetCarriedItemPacket(inventory.selected));
+            this.deliveredToHand = true;
+        }
+        ItemStack held = inventory.getSelected();
+        if (ItemStack.isSameItemSameComponents(held, output)) {
+            held.grow(output.split(held.getMaxStackSize() - held.getCount()).getCount());
+        }
+        inventory.setChanged();
+        this.player.connection.send(new ClientboundContainerSetSlotPacket(-2, 0, inventory.selected, held));
+    }
+
     private void giveBack(ItemStack stack) {
-        if (!this.player.getInventory().add(stack)) {
+        this.player.getInventory().add(stack);
+        if (!stack.isEmpty()) {
             this.player.drop(stack, false);
         }
     }

@@ -1,9 +1,12 @@
 package dev.lanhuo.anvilautotree.storage;
 
+import com.mojang.datafixers.util.Either;
 import dev.dubhe.anvilcraft.block.entity.storage.StorageBlockEntity;
 import dev.dubhe.anvilcraft.saved.storage.LargeCrateStorage;
 import dev.lanhuo.anvilautotree.net.StorageKind;
 import dev.dubhe.anvilcraft.rpc.StorageServerStub;
+import dev.dubhe.anvilcraft.item.HyperdimensionTerminalItem;
+import dev.dubhe.anvilcraft.item.TerminalItem;
 import dev.dubhe.anvilcraft.saved.storage.BaseStorage;
 import dev.dubhe.anvilcraft.saved.storage.HyperdimensionStorage;
 import dev.dubhe.anvilcraft.saved.storage.ShulkerContainerStorage;
@@ -59,6 +62,17 @@ public final class StorageLookup {
             return Storages.get().get(container.getId()).filter(storage -> kindOf(storage).isPresent());
         }
         return Optional.empty();
+    }
+
+    public static Optional<BaseStorage<?>> resolve(ServerPlayer player, Either<BlockPos, UUID> source) {
+        return source.map(pos -> resolve(player, pos), id -> resolveBoundHyperdimension(player, id));
+    }
+
+    private static Optional<BaseStorage<?>> resolveBoundHyperdimension(ServerPlayer player, UUID id) {
+        boolean bound = TerminalItem.getAll(player).stream()
+            .anyMatch(stack -> stack.getItem() instanceof HyperdimensionTerminalItem
+                && id.equals(StorageServerStub.terminalTargetId(player, stack)));
+        return bound ? Storages.get().get(id).filter(HyperdimensionStorage.class::isInstance) : Optional.empty();
     }
 
     public static Optional<StorageKind> kindOf(BaseStorage<?> storage) {

@@ -1,13 +1,16 @@
 package dev.lanhuo.anvilautotree.client;
 
 import dev.lanhuo.anvilautotree.AnvilAutoTree;
+import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.components.EditBox;
 import net.minecraft.client.gui.components.events.ContainerEventHandler;
 import net.minecraft.client.gui.components.events.GuiEventListener;
 import net.neoforged.api.distmarker.Dist;
+import net.neoforged.bus.api.EventPriority;
 import net.neoforged.bus.api.SubscribeEvent;
 import net.neoforged.fml.common.EventBusSubscriber;
 import net.neoforged.neoforge.client.event.ClientTickEvent;
+import net.neoforged.neoforge.client.event.InputEvent;
 import net.neoforged.neoforge.client.event.ScreenEvent;
 import org.lwjgl.glfw.GLFW;
 
@@ -22,6 +25,13 @@ import org.lwjgl.glfw.GLFW;
 @EventBusSubscriber(modid = AnvilAutoTree.MOD_ID, bus = EventBusSubscriber.Bus.GAME, value = Dist.CLIENT)
 public final class AutoCraftClientEvents {
     private AutoCraftClientEvents() {
+    }
+
+    @SubscribeEvent(priority = EventPriority.LOWEST)
+    public static void onPickBlock(InputEvent.InteractionKeyMappingTriggered event) {
+        if (event.isPickBlock() && TerminalPickBlock.tryPick(Minecraft.getInstance())) {
+            event.setCanceled(true);
+        }
     }
 
     @SubscribeEvent
