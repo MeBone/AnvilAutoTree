@@ -38,7 +38,7 @@ public final class CraftTreeOverlay {
     private static final int GAP_X = 10;
     private static final int GAP_Y = 20;
     private static final int PADDING = 6;
-    private static final int HEADER = 28;
+    private static final int HEADER = 30;
     private static final int FOOTER = 26;
     private static final int FOOTER_GAP = 4;
     private static final int QUANTITY_WIDTH = 32;
@@ -411,7 +411,7 @@ public final class CraftTreeOverlay {
                 closeHovered ? theme.hover() : SILVER, LIGHT_EDGE, DARK_EDGE);
             drawCenteredLabel(graphics, font, Component.literal("×"), closeX, panelY + 12, CLOSE_WIDTH, INK);
         }
-        bevel(graphics, viewX - 2, viewY - 2, viewWidth + 4, viewHeight + 4, theme.viewport(), DARK_EDGE, LIGHT_EDGE);
+        bevel(graphics, viewX, viewY - 2, viewWidth, viewHeight + 4, theme.viewport(), DARK_EDGE, LIGHT_EDGE);
 
         if (root < 0) {
             // 有失败原因时底部已经在显示原因，视口里不再重复一句「没有步骤」。

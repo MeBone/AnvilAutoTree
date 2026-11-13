@@ -19,6 +19,7 @@ import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.Items;
 import net.minecraft.world.item.component.ItemContainerContents;
 import net.minecraft.world.item.crafting.Recipe;
+import net.minecraft.world.level.block.Block;
 import net.minecraft.world.level.block.ShulkerBoxBlock;
 
 final class StructurePacking {
@@ -48,16 +49,16 @@ final class StructurePacking {
             var options = player.registryAccess().registryOrThrow(net.minecraft.core.registries.Registries.BLOCK)
                 .getTag(entry.getKey()).orElseThrow();
             var choice = options.stream().map(block -> new ItemStack(block.value().asItem()))
-                .filter(stack -> !stack.isEmpty())
+                .filter(StructurePacking::canPack)
                 .max(java.util.Comparator.comparingLong(stack -> access.count(stack) - totals.getOrDefault(StackKey.of(stack), 0L)))
-                .orElseThrow();
+                .orElseThrow(UnpackableMaterial::new);
             totals.merge(StackKey.of(choice), (long) entry.getValue(), Long::sum);
         }
         var materials = new ArrayList<IngredientChoice>();
         var stacks = new ArrayList<ItemStack>();
         totals.forEach((key, count) -> {
             ItemStack stack = key.proto();
-            if (!stack.getItem().canFitInsideContainerItems()) throw new IllegalArgumentException("Unpackable material");
+            if (!canPack(stack)) throw new UnpackableMaterial();
             if (count > (long) BOX_SLOTS * GRID_SLOTS * stack.getMaxStackSize()) throw new IllegalArgumentException("Too many materials");
             materials.add(new IngredientChoice(key, Math.toIntExact(count)));
             for (long remaining = count; remaining > 0;) {
@@ -69,6 +70,14 @@ final class StructurePacking {
         return new StructurePacking(materials, stacks);
     }
 
+    private static boolean canPack(ItemStack stack) {
+        return !stack.isEmpty() && !(Block.byItem(stack.getItem()) instanceof ShulkerBoxBlock)
+            && stack.canFitInsideContainerItems();
+    }
+
+    static final class UnpackableMaterial extends RuntimeException {
+    }
+
     List<IngredientChoice> materials() {
         return materials;
     }
@@ -78,6 +87,9 @@ final class StructurePacking {
     }
 
     Component check(ServerPlayer player, BlockPos pos, StorageAccess access) throws ReflectiveOperationException {
+        if (!stacks.stream().allMatch(StructurePacking::canPack)) {
+            return Component.translatable("anvilautotree.error.structure_unpackable");
+        }
         if (boxes() == 0 || boxes() > GRID_SLOTS) {
             return Component.translatable("anvilautotree.error.structure_size");
         }

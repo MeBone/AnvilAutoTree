@@ -76,6 +76,9 @@ public final class CraftService {
                     fail(player, payload, problem, kind);
                     return;
                 }
+            } catch (StructurePacking.UnpackableMaterial exception) {
+                fail(player, payload, "anvilautotree.error.structure_unpackable", kind);
+                return;
             } catch (ReflectiveOperationException | RuntimeException exception) {
                 fail(player, payload, "anvilautotree.error.structure_grid", kind);
                 return;

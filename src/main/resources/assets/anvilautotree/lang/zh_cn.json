@@ -74,5 +74,6 @@
   "anvilautotree.status.structure_packed": "多方块材料已装入潜影盒并放入合成表",
   "anvilautotree.gui.structure_single": "每次准备一套结构材料",
   "anvilautotree.gui.structure_pack": "打包装箱",
-  "anvilautotree.gui.structure_pack_hint": "补齐结构材料并装入空潜影盒，放进仓储合成表"
+  "anvilautotree.gui.structure_pack_hint": "补齐结构材料并装入空潜影盒，放进仓储合成表",
+  "anvilautotree.error.structure_unpackable": "配方含有不能放入潜影盒的材料"
 }

@@ -74,5 +74,6 @@
   "anvilautotree.status.structure_packed": "Packed structure materials into shulker boxes in the crafting grid",
   "anvilautotree.gui.structure_single": "Prepares one set of structure materials",
   "anvilautotree.gui.structure_pack": "Pack materials",
-  "anvilautotree.gui.structure_pack_hint": "Prepare structure materials, pack them into shulker boxes, and place them in the crafting grid"
+  "anvilautotree.gui.structure_pack_hint": "Prepare structure materials, pack them into shulker boxes, and place them in the crafting grid",
+  "anvilautotree.error.structure_unpackable": "This recipe includes materials that cannot go inside shulker boxes"
 }
