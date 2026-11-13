@@ -197,11 +197,12 @@ public final class AutoCraftClient {
         Component message = payload.success() ? null : payload.message();
         boolean canConfirm = payload.success() && plannedStorage.isPresent();
         if (CraftTreeOverlay.LIVE.isVisible()) {
-            CraftTreeOverlay.LIVE.updatePlan(payload.tree(), message, canConfirm, payload.storage().shulker(), quantity);
+            CraftTreeOverlay.LIVE.updatePlan(payload.tree(), message, canConfirm, payload.storage().kind(), quantity);
         } else {
-            CraftTreeOverlay.LIVE.show(payload.tree(), message, canConfirm, payload.storage().shulker(), quantity,
+            CraftTreeOverlay.LIVE.show(payload.tree(), message, canConfirm, payload.storage().kind(), quantity,
                 AutoCraftClient::changeQuantity, AutoCraftClient::confirm, AutoCraftClient::cancel);
         }
+        CraftTreeOverlay.LIVE.setSingleStructure(pending.transfer() == null);
         if (!payload.success()) {
             // 失败时没有可执行的作业：标记为已结束，玩家补好材料后再点「+」会重新规划。
             planFailed = true;
@@ -217,7 +218,11 @@ public final class AutoCraftClient {
         if (minecraft.player != null) {
             minecraft.player.displayClientMessage(payload.message(), !payload.success());
         }
-        if (!payload.success() || quantity > 1) {
+        if (payload.success() && pending.transfer() == null && minecraft.screen instanceof
+            dev.dubhe.anvilcraft.client.gui.screen.StorageScreen screen && screen.getMenu() == pending.container()) {
+            screen.showCraftingAfterTransfer(false);
+        }
+        if (!payload.success() || quantity > 1 || pending.transfer() == null) {
             clear();
             return;
         }

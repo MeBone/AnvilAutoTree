@@ -2,6 +2,7 @@ package dev.lanhuo.anvilautotree.client;
 
 import dev.lanhuo.anvilautotree.net.CraftNodePayload;
 import dev.lanhuo.anvilautotree.net.CraftRequestPayload;
+import dev.lanhuo.anvilautotree.net.StorageKind;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
@@ -85,7 +86,13 @@ public final class CraftTreeOverlay {
     private static final Theme SHULKER = new Theme(
         "anvilautotree.gui.title.shulker", 0xFFC9B7CB, 0xFFD0A5CB, 0xFFF1D7EC, 0xFF8D6287, 0xFFB09CAF, 0xFFE0B7DB
     );
+    private static final ResourceLocation CRATE_ICON = ResourceLocation.fromNamespaceAndPath("anvilcraft", "large_crate");
+    private static final Theme CRATE = new Theme(
+        "anvilautotree.gui.title.crate", 0xFFCFB595, 0xFFD8AD77, 0xFFF1D3AA, 0xFF8A603B, 0xFFAD9478, 0xFFE9C18C
+    );
     private Theme theme = HYPERDIMENSION;
+    private boolean singleStructure;
+    private StorageKind storageKind = StorageKind.HYPERDIMENSION;
 
     private boolean visible;
     private List<CraftNodePayload> nodes = List.of();
@@ -172,9 +179,10 @@ public final class CraftTreeOverlay {
      * @param canConfirm     是否允许点「开始合成」
      */
     public void show(
-        List<CraftNodePayload> payloads, Component status, boolean canConfirm, boolean shulker, int quantity,
+        List<CraftNodePayload> payloads, Component status, boolean canConfirm, StorageKind kind, int quantity,
         IntConsumer changeQuantity, Runnable confirm, Runnable cancel
     ) {
+        singleStructure = false;
         onQuantityChanged = changeQuantity;
         onConfirm = confirm;
         onCancel = cancel;
@@ -195,7 +203,7 @@ public final class CraftTreeOverlay {
         onlyMissing = false;
         showingMissingAutomatically = false;
         initQuantityInput(quantity);
-        updatePlan(payloads, status, canConfirm, shulker, quantity);
+        updatePlan(payloads, status, canConfirm, kind, quantity);
         setBounds(AutoCraftClientConfig.currentLayout());
         centerRoot();
     }
@@ -219,14 +227,20 @@ public final class CraftTreeOverlay {
         });
     }
 
-    public void updatePlan(List<CraftNodePayload> payloads, Component message, boolean canConfirm, boolean shulker, int quantity) {
+    public void updatePlan(List<CraftNodePayload> payloads, Component message, boolean canConfirm, StorageKind kind, int quantity) {
         boolean hadTree = root >= 0;
         boolean wasFiltered = onlyMissing;
         nodes = List.copyOf(payloads);
         status = message;
         planning = false;
         confirmEnabled = canConfirm;
-        theme = shulker ? SHULKER : HYPERDIMENSION;
+        storageKind = kind;
+        theme = switch (kind) {
+            case HYPERDIMENSION -> HYPERDIMENSION;
+            case SHULKER -> SHULKER;
+            case LARGE_CRATE -> CRATE;
+        };
+        quantityInput.setEditable(!layoutPreview && kind.supportsBatch());
         this.quantity = quantity;
         if (!canConfirm && !onlyMissing && payloads.stream().anyMatch(CraftNodePayload::missing)) {
             onlyMissing = true;
@@ -241,6 +255,11 @@ public final class CraftTreeOverlay {
             ensurePlaced();
             centerRoot();
         }
+    }
+
+    void setSingleStructure(boolean singleStructure) {
+        this.singleStructure = singleStructure;
+        quantityInput.setEditable(!layoutPreview && !singleStructure && storageKind.supportsBatch());
     }
 
     public void markPlanning(int quantity) {
@@ -375,9 +394,11 @@ public final class CraftTreeOverlay {
         int closeX = closeX();
         bevel(graphics, viewX, panelY + PADDING, closeX - viewX - 3, CLOSE_HEIGHT,
             theme.header(), theme.headerLight(), theme.headerDark());
-        boolean shulker = theme == SHULKER;
-        ItemStack storageIcon = BuiltInRegistries.ITEM.getOptional(shulker ? SHULKER_ICON : HYPERDIMENSION_ICON)
-            .orElse(shulker ? Items.SHULKER_SHELL : Items.ENDER_EYE).getDefaultInstance();
+        ItemStack storageIcon = (switch (storageKind) {
+            case HYPERDIMENSION -> BuiltInRegistries.ITEM.getOptional(HYPERDIMENSION_ICON).orElse(Items.ENDER_EYE);
+            case SHULKER -> BuiltInRegistries.ITEM.getOptional(SHULKER_ICON).orElse(Items.SHULKER_SHELL);
+            case LARGE_CRATE -> BuiltInRegistries.ITEM.getOptional(CRATE_ICON).orElse(Items.BARREL);
+        }).getDefaultInstance();
         graphics.renderItem(storageIcon, viewX + 4, panelY + 8);
         int titleX = viewX + 23;
         String title = fitLabel(font, Component.translatable(theme.title()), closeX - titleX - 7);
@@ -687,7 +708,7 @@ public final class CraftTreeOverlay {
     }
 
     private void renderFooter(GuiGraphics graphics, Font font, int mouseX, int mouseY) {
-        renderButton(graphics, font, quantity > 1 ? "anvilautotree.gui.confirm_batch" : "anvilautotree.gui.confirm",
+        renderButton(graphics, font, singleStructure ? "anvilautotree.gui.structure_pack" : quantity > 1 ? "anvilautotree.gui.confirm_batch" : "anvilautotree.gui.confirm",
             footer.confirm(), mouseX, mouseY, !layoutPreview && confirmEnabled && validQuantityInput && !busy, false,
             0);
         quantityInput.render(graphics, mouseX, mouseY, 0);
@@ -696,11 +717,12 @@ public final class CraftTreeOverlay {
         renderButton(graphics, font, "anvilautotree.gui.cancel", footer.cancel(), mouseX, mouseY, !layoutPreview, false,
             2);
         if (!layoutPreview && inRect(mouseX, mouseY, footer.quantity())) {
-            graphics.renderTooltip(font, Component.translatable("anvilautotree.gui.quantity_hint",
-                CraftRequestPayload.MAX_QUANTITY), mouseX, mouseY);
+            graphics.renderTooltip(font, singleStructure ? Component.translatable("anvilautotree.gui.structure_single") : storageKind.supportsBatch()
+                ? Component.translatable("anvilautotree.gui.quantity_hint", CraftRequestPayload.MAX_QUANTITY)
+                : Component.translatable("anvilautotree.error.crate_single_only"), mouseX, mouseY);
         } else if (!layoutPreview && inRect(mouseX, mouseY, footer.confirm())) {
             graphics.renderTooltip(font, Component.translatable(
-                quantity > 1 ? "anvilautotree.gui.batch_hint" : "anvilautotree.gui.confirm_hint"), mouseX, mouseY);
+                singleStructure ? "anvilautotree.gui.structure_pack_hint" : quantity > 1 ? "anvilautotree.gui.batch_hint" : "anvilautotree.gui.confirm_hint"), mouseX, mouseY);
         }
     }
 
@@ -780,6 +802,9 @@ public final class CraftTreeOverlay {
         boolean validBeforeClick = validQuantityInput;
         if (!layoutPreview && inRect(mouseX, mouseY, footer.quantity())) {
             pressConsumed = true;
+            if (singleStructure || !storageKind.supportsBatch()) {
+                return true;
+            }
             boolean alreadyFocused = quantityInput.isFocused();
             quantityInput.setFocused(true);
             quantityInput.mouseClicked(mouseX, mouseY, button);

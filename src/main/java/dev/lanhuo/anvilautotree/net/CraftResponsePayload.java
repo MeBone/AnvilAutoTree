@@ -51,19 +51,19 @@ public record CraftResponsePayload(
         tree = List.copyOf(tree);
     }
 
-    public record Storage(boolean shulker, Optional<UUID> id) {
+    public record Storage(StorageKind kind, Optional<UUID> id) {
         private static final StreamCodec<RegistryFriendlyByteBuf, Storage> STREAM_CODEC = StreamCodec.composite(
-            ByteBufCodecs.BOOL, Storage::shulker, ByteBufCodecs.optional(UUIDUtil.STREAM_CODEC), Storage::id, Storage::new
+            StorageKind.STREAM_CODEC, Storage::kind, ByteBufCodecs.optional(UUIDUtil.STREAM_CODEC), Storage::id, Storage::new
         );
     }
 
     public static CraftResponsePayload done(boolean success, Component message, int requestId) {
-        return new CraftResponsePayload(success, PHASE_DONE, message, List.of(), new Storage(false, Optional.empty()), requestId);
+        return new CraftResponsePayload(success, PHASE_DONE, message, List.of(), new Storage(StorageKind.HYPERDIMENSION, Optional.empty()), requestId);
     }
 
     public static CraftResponsePayload accepted(int requestId) {
         return new CraftResponsePayload(true, PHASE_ACCEPTED, Component.empty(), List.of(),
-            new Storage(false, Optional.empty()), requestId);
+            new Storage(StorageKind.HYPERDIMENSION, Optional.empty()), requestId);
     }
 
     @Override

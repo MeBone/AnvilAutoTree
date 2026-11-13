@@ -1,7 +1,11 @@
 package dev.lanhuo.anvilautotree.craft;
 
 import dev.dubhe.anvilcraft.saved.storage.BaseStorage;
-import dev.dubhe.anvilcraft.saved.storage.ShulkerContainerStorage;
+import dev.dubhe.anvilcraft.recipe.multiblock.IMultiblockRecipe;
+import dev.dubhe.anvilcraft.recipe.multiblock.MultiblockRecipe;
+import dev.dubhe.anvilcraft.recipe.multiblock.MultiblockConversionRecipe;
+import net.minecraft.world.item.Items;
+import dev.lanhuo.anvilautotree.net.StorageKind;
 import dev.lanhuo.anvilautotree.net.CraftNodePayload;
 import dev.lanhuo.anvilautotree.net.CraftRequestPayload;
 import dev.lanhuo.anvilautotree.net.CraftResponsePayload;
@@ -26,31 +30,62 @@ public final class CraftService {
         ServerLevel level = (ServerLevel) player.level();
         Optional<BaseStorage<?>> resolved = StorageLookup.resolve(player, payload.sourcePos());
         if (resolved.isEmpty()) {
-            fail(player, payload, "anvilautotree.error.no_storage", false);
+            fail(player, payload, "anvilautotree.error.no_storage", StorageKind.HYPERDIMENSION);
             return;
         }
         BaseStorage<?> storage = resolved.get();
-        boolean shulker = storage instanceof ShulkerContainerStorage;
+        StorageKind kind = StorageLookup.kindOf(storage).orElseThrow();
+        if (!kind.supportsBatch() && payload.quantity() > 1) {
+            fail(player, payload, "anvilautotree.error.crate_single_only", kind);
+            return;
+        }
         if (payload.quantity() < 1 || payload.quantity() > CraftRequestPayload.MAX_QUANTITY) {
-            fail(player, payload, "anvilautotree.error.invalid_quantity", shulker);
+            fail(player, payload, "anvilautotree.error.invalid_quantity", kind);
             return;
         }
         if (payload.execute() && !payload.storageId().orElseThrow().equals(storage.getId())) {
-            fail(player, payload, "anvilautotree.error.storage_changed", shulker);
+            fail(player, payload, "anvilautotree.error.storage_changed", kind);
             return;
         }
         if (storage.getRecipeBases() == null) {
-            fail(player, payload, "anvilautotree.error.not_unlocked", shulker);
+            fail(player, payload, "anvilautotree.error.not_unlocked", kind);
             return;
         }
         Optional<? extends RecipeHolder<?>> found = level.getRecipeManager().byKey(payload.recipeId());
         if (found.isEmpty()) {
-            fail(player, payload, "anvilautotree.error.unknown_recipe", shulker);
+            fail(player, payload, "anvilautotree.error.unknown_recipe", kind);
             return;
         }
         RecipeHolder<?> recipe = found.get();
         StorageAccess access = new InventoryAwareStorageAccess(new ItemHandlerStorageAccess(storage.getItems()), player);
-        CraftPlan plan = CraftPlanner.plan(level, access, recipe, payload.stonecutter(), payload.quantity());
+        StructurePacking packing = null;
+        CraftPlan plan;
+        if (recipe.value() instanceof IMultiblockRecipe) {
+            if (kind == StorageKind.LARGE_CRATE || payload.quantity() != 1) {
+                fail(player, payload, "anvilautotree.error.structure_storage", kind);
+                return;
+            }
+            if (!(recipe.value() instanceof MultiblockRecipe || recipe.value() instanceof MultiblockConversionRecipe)) {
+                fail(player, payload, "anvilautotree.error.unsupported_recipe", kind);
+                return;
+            }
+            try {
+                packing = StructurePacking.prepare(recipe.value(), player, access);
+                Component problem = packing.check(player, payload.sourcePos(), access);
+                if (problem != null) {
+                    fail(player, payload, problem, kind);
+                    return;
+                }
+            } catch (ReflectiveOperationException | RuntimeException exception) {
+                fail(player, payload, "anvilautotree.error.structure_grid", kind);
+                return;
+            }
+            var icon = recipe.value().getResultItem(level.registryAccess());
+            if (icon.isEmpty()) icon = Items.SHULKER_BOX.getDefaultInstance();
+            plan = CraftPlanner.planStructure(level, access, recipe, icon, packing.materials());
+        } else {
+            plan = CraftPlanner.plan(level, access, recipe, payload.stonecutter(), payload.quantity());
+        }
         if (!payload.execute()) {
             PacketDistributor.sendToPlayer(
                 player,
@@ -59,7 +94,7 @@ public final class CraftService {
                     CraftResponsePayload.PHASE_PLAN,
                     plan.isSuccess() ? Component.empty() : describeFailure(plan),
                     CraftNodePayload.flatten(plan.tree()),
-                    new CraftResponsePayload.Storage(shulker, Optional.of(storage.getId())),
+                    new CraftResponsePayload.Storage(kind, Optional.of(storage.getId())),
                     payload.requestId()
                 )
             );
@@ -72,7 +107,7 @@ public final class CraftService {
             );
             return;
         }
-        if (plan.steps().isEmpty()) {
+        if (plan.steps().isEmpty() && packing == null) {
             PacketDistributor.sendToPlayer(
                 player,
                 CraftResponsePayload.done(
@@ -83,7 +118,9 @@ public final class CraftService {
             );
             return;
         }
-        CraftJobManager.submit(new CraftJob(player, access, plan.steps(), shulker, payload.requestId(), payload.quantity()));
+        StructurePacking structure = packing;
+        CraftJobManager.submit(new CraftJob(player, access, plan.steps(), kind, payload.requestId(), payload.quantity(),
+            structure == null ? null : () -> structure.finish(player, payload.sourcePos(), storage, access)));
         PacketDistributor.sendToPlayer(player, CraftResponsePayload.accepted(payload.requestId()));
     }
 
@@ -119,12 +156,16 @@ public final class CraftService {
         return text;
     }
 
-    private static void fail(ServerPlayer player, CraftRequestPayload payload, String translationKey, boolean shulker) {
+    private static void fail(ServerPlayer player, CraftRequestPayload payload, String translationKey, StorageKind kind) {
+        fail(player, payload, Component.translatable(translationKey), kind);
+    }
+
+    private static void fail(ServerPlayer player, CraftRequestPayload payload, Component message, StorageKind kind) {
         int phase = payload.execute() ? CraftResponsePayload.PHASE_DONE : CraftResponsePayload.PHASE_PLAN;
         PacketDistributor.sendToPlayer(
             player,
-            new CraftResponsePayload(false, phase, Component.translatable(translationKey), List.of(),
-                new CraftResponsePayload.Storage(shulker, Optional.empty()), payload.requestId())
+            new CraftResponsePayload(false, phase, message, List.of(),
+                new CraftResponsePayload.Storage(kind, Optional.empty()), payload.requestId())
         );
     }
 }

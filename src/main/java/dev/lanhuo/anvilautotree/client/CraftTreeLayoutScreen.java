@@ -1,6 +1,7 @@
 package dev.lanhuo.anvilautotree.client;
 
 import dev.lanhuo.anvilautotree.net.CraftNodePayload;
+import dev.lanhuo.anvilautotree.net.StorageKind;
 import java.util.List;
 import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.client.gui.components.Button;
@@ -15,7 +16,9 @@ final class CraftTreeLayoutScreen extends Screen {
     private static final ResourceLocation TERMINAL = ResourceLocation.fromNamespaceAndPath(
         "anvilcraft", "textures/gui/misc/background/storage_station.png"
     );
-    private static final int TOOLBAR_HEIGHT = 44;
+    private static final int TERMINAL_WIDTH = 300;
+    private static final int TERMINAL_HEIGHT = 222;
+    private static final int TOOLBAR_HEIGHT = 30;
     private final Screen parent;
     private final CraftTreeOverlay preview = new CraftTreeOverlay(true);
     private Button reset;
@@ -37,7 +40,7 @@ final class CraftTreeLayoutScreen extends Screen {
                 new CraftNodePayload(0, Items.IRON_INGOT.getDefaultInstance(), 16, 16, 0, false),
                 new CraftNodePayload(0, Items.REDSTONE.getDefaultInstance(), 16, 16, 0, false),
                 new CraftNodePayload(1, Items.OAK_LOG.getDefaultInstance(), 12, 16, 0, false)
-            ), null, false, false, 16, ignored -> {}, () -> {}, () -> {});
+            ), null, false, StorageKind.HYPERDIMENSION, 16, ignored -> {}, () -> {}, () -> {});
         }
         int buttonWidth = Math.min(96, (width - 24) / 3);
         reset = addRenderableWidget(Button.builder(Component.translatable("anvilautotree.layout.reset"),
@@ -52,14 +55,19 @@ final class CraftTreeLayoutScreen extends Screen {
     public void render(GuiGraphics graphics, int mouseX, int mouseY, float partialTick) {
         graphics.fill(0, 0, width, height, 0xFF272831);
         if (minecraft.getResourceManager().getResource(TERMINAL).isPresent()) {
-            graphics.blit(TERMINAL, (width - 282) / 2, (height - 222) / 2, 0, 0, 282, 222, 512, 256);
+            graphics.blit(TERMINAL, (width - TERMINAL_WIDTH) / 2, (height - TERMINAL_HEIGHT) / 2,
+                0, 0, TERMINAL_WIDTH, TERMINAL_HEIGHT, 512, 256);
         }
         preview.render(graphics, mouseX, mouseY);
         int toolbarY = positionToolbar();
         graphics.pose().pushPose();
         graphics.pose().translate(0, 0, 700);
         graphics.fill(0, toolbarY, width, toolbarY + TOOLBAR_HEIGHT, 0xEE20212A);
-        graphics.drawCenteredString(font, Component.translatable("anvilautotree.layout.hint"), width / 2, toolbarY + 5, 0xFFFFFFFF);
+        int hintY = toolbarY == 0 ? height - 12 : 4;
+        var window = preview.extraAreas().getFirst();
+        if (hintY + font.lineHeight <= window.getY() || hintY >= window.getY() + window.getHeight()) {
+            graphics.drawCenteredString(font, Component.translatable("anvilautotree.layout.hint"), width / 2, hintY, 0xFFFFFFFF);
+        }
         super.render(graphics, mouseX, mouseY, partialTick);
         graphics.pose().popPose();
     }
@@ -75,9 +83,9 @@ final class CraftTreeLayoutScreen extends Screen {
         int y = bottom <= height - TOOLBAR_HEIGHT || height - bottom >= window.getY() ? height - TOOLBAR_HEIGHT : 0;
         int width = save.getWidth();
         int left = (this.width - width * 3 - 12) / 2;
-        reset.setPosition(left, y + 18);
-        cancel.setPosition(left + width + 6, y + 18);
-        save.setPosition(left + (width + 6) * 2, y + 18);
+        reset.setPosition(left, y + 5);
+        cancel.setPosition(left + width + 6, y + 5);
+        save.setPosition(left + (width + 6) * 2, y + 5);
         return y;
     }
 

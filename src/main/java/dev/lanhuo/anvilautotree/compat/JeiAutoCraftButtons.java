@@ -1,6 +1,9 @@
 package dev.lanhuo.anvilautotree.compat;
 
 import java.util.function.Supplier;
+import dev.dubhe.anvilcraft.recipe.multiblock.MultiblockRecipe;
+import dev.dubhe.anvilcraft.recipe.multiblock.MultiblockConversionRecipe;
+import dev.lanhuo.anvilautotree.client.AutoCraftClient;
 import mezz.jei.api.constants.RecipeTypes;
 import mezz.jei.api.gui.IRecipeLayoutDrawable;
 import mezz.jei.api.gui.builder.ITooltipBuilder;
@@ -48,8 +51,13 @@ final class JeiAutoCraftButtons {
             @Override
             public <R> IIconButtonController createButtonController(IRecipeLayoutDrawable<R> layout) {
                 var type = layout.getRecipeCategory().getRecipeType();
-                if (!(layout.getRecipe() instanceof RecipeHolder<?>)
-                    || (!type.equals(RecipeTypes.CRAFTING) && !type.equals(RecipeTypes.STONECUTTING))) {
+                if (!(layout.getRecipe() instanceof RecipeHolder<?> holder)) {
+                    return null;
+                }
+                if (holder.value() instanceof MultiblockRecipe || holder.value() instanceof MultiblockConversionRecipe) {
+                    return new StructureButton(holder, runtime);
+                }
+                if (!type.equals(RecipeTypes.CRAFTING) && !type.equals(RecipeTypes.STONECUTTING)) {
                     return null;
                 }
                 return new AutoCraftButton<>(layout, runtime);
@@ -103,6 +111,53 @@ final class JeiAutoCraftButtons {
             AbstractContainerMenu menu = screen.getMenu();
             var handler = jei.getRecipeTransferManager().getRecipeTransferHandler(menu, layout.getRecipeCategory()).orElse(null);
             return handler instanceof StorageRecipeTransfer<AbstractContainerMenu, R> transfer ? new Target<>(menu, transfer) : null;
+        }
+    }
+
+    private record StructureButton(RecipeHolder<?> recipe, Supplier<IJeiRuntime> runtime) implements IIconButtonController {
+        @Override
+        public void initState(IButtonState state) {
+            state.setIcon(PURPLE_PLUS);
+        }
+
+        @Override
+        public void updateState(IButtonState state) {
+            var menu = menu();
+            boolean available = menu != null && position(menu).isPresent();
+            state.setVisible(available);
+            state.setActive(available);
+        }
+
+        @Override
+        public boolean onPress(IJeiUserInput input) {
+            var menu = menu();
+            var minecraft = Minecraft.getInstance();
+            if (menu == null || minecraft.player == null) return false;
+            var pos = position(menu).orElse(null);
+            if (pos == null) return false;
+            if (!input.isSimulate()) {
+                AutoCraftClient.plan(menu, pos, recipe, minecraft.player, null);
+                if (runtime.get().getRecipesGui() instanceof Screen recipes && minecraft.screen == recipes) recipes.onClose();
+            }
+            return true;
+        }
+
+        @Override
+        public void getTooltips(ITooltipBuilder tooltip) {
+            tooltip.add(Component.translatable("anvilautotree.gui.structure_pack_hint"));
+        }
+
+        private AbstractContainerMenu menu() {
+            var jei = runtime.get();
+            return jei != null && jei.getRecipesGui().getParentScreen().orElse(null) instanceof AbstractContainerScreen<?> screen
+                ? screen.getMenu() : null;
+        }
+
+        private java.util.Optional<net.minecraft.core.BlockPos> position(AbstractContainerMenu menu) {
+            var level = Minecraft.getInstance().level;
+            return StorageRecipeTransfer.sourcePosition(menu).filter(pos -> level != null
+                && (!level.hasChunkAt(pos) || !(level.getBlockEntity(pos) instanceof
+                    dev.dubhe.anvilcraft.block.entity.storage.LargeCrateBlockEntity)));
         }
     }
 

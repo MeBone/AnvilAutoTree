@@ -57,18 +57,23 @@ public final class StorageRecipeTransfer<C extends AbstractContainerMenu, R> imp
         if (!recipeType.equals(RecipeTypes.CRAFTING) && !recipeType.equals(RecipeTypes.STONECUTTING)) {
             return handler;
         }
+        return sourcePosition(menu).<IRecipeTransferHandler<C, R>>map(pos -> new StorageRecipeTransfer<>(handler, pos))
+            .orElse(handler);
+    }
+
+    static Optional<BlockPos> sourcePosition(AbstractContainerMenu menu) {
         var accessor = SOURCE_POSITION.get(menu.getClass());
         if (accessor.isEmpty()) {
-            return handler;
+            return Optional.empty();
         }
         try {
             if (accessor.get().invoke(menu) instanceof BlockPos sourcePos) {
-                return new StorageRecipeTransfer<>(handler, sourcePos.immutable());
+                return Optional.of(sourcePos.immutable());
             }
         } catch (ReflectiveOperationException exception) {
             AnvilAutoTree.LOGGER.debug("Unable to read the AnvilCraft menu's storage position", exception);
         }
-        return handler;
+        return Optional.empty();
     }
 
     @Override

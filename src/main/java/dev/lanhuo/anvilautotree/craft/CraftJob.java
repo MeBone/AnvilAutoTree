@@ -1,6 +1,7 @@
 package dev.lanhuo.anvilautotree.craft;
 
 import dev.lanhuo.anvilautotree.net.CraftResponsePayload;
+import dev.lanhuo.anvilautotree.net.StorageKind;
 import java.util.ArrayList;
 import java.util.List;
 import net.minecraft.network.chat.Component;
@@ -18,20 +19,22 @@ public final class CraftJob {
     private final ServerPlayer player;
     private final StorageAccess storage;
     private final List<CraftStep> steps;
-    private final boolean shulker;
+    private final StorageKind kind;
     private final int requestId;
     private final int quantity;
+    private final java.util.function.Supplier<Component> packing;
     private int stepIndex;
     private int craftsInStep;
     private boolean failed;
 
-    public CraftJob(ServerPlayer player, StorageAccess storage, List<CraftStep> steps, boolean shulker, int requestId, int quantity) {
+    public CraftJob(ServerPlayer player, StorageAccess storage, List<CraftStep> steps, StorageKind kind, int requestId, int quantity, java.util.function.Supplier<Component> packing) {
         this.player = player;
         this.storage = storage;
         this.steps = List.copyOf(steps);
-        this.shulker = shulker;
+        this.kind = kind;
         this.requestId = requestId;
         this.quantity = quantity;
+        this.packing = packing;
     }
 
     /**
@@ -78,17 +81,19 @@ public final class CraftJob {
     }
 
     public int craftsPerTick(int hyperdimensionParallelism) {
-        return this.shulker ? Math.max(1, hyperdimensionParallelism / 12) : hyperdimensionParallelism;
+        return this.kind.craftsPerTick(hyperdimensionParallelism);
     }
 
     public void complete() {
         Component message = this.failed
             ? Component.translatable("anvilautotree.status.failed")
             : Component.translatable(this.quantity > 1 ? "anvilautotree.status.batch_done" : "anvilautotree.status.done");
-        PacketDistributor.sendToPlayer(
-            this.player,
-            CraftResponsePayload.done(!this.failed, message, this.requestId)
-        );
+        if (!this.failed && packing != null) {
+            Component error = packing.get();
+            this.failed = error != null;
+            message = this.failed ? error : Component.translatable("anvilautotree.status.structure_packed");
+        }
+        PacketDistributor.sendToPlayer(this.player, CraftResponsePayload.done(!this.failed, message, this.requestId));
     }
 
     private boolean execute(CraftStep step, int crafts) {

@@ -28,7 +28,7 @@ Minecraft 1.21.1 下的验证组合为 AnvilCraft `snapshot.2854`、`snapshot.28
 
 ## 配置
 
-在「模组」列表中选择 **铁砧工艺：这是棵树 → 配置 → 客户端**。在预览里拖标题栏定位、拖边角改尺寸，然后点「保存布局」。临时移动游戏中的合成树只影响当前窗口。
+在「模组」列表中选择 **AnvilCraft:AutoTree → 配置 → 客户端**。在预览里拖标题栏定位、拖边角改尺寸，然后点「保存布局」。临时移动游戏中的合成树只影响当前窗口。
 
 `config/anvilautotree-common.toml`：
 
@@ -45,7 +45,7 @@ Minecraft 1.21.1 下的验证组合为 AnvilCraft `snapshot.2854`、`snapshot.28
 - 支持：工作台配方、切石机配方。
 - 批量直接入库支持无容器返还的普通有序、无序及切石机配方。
 - 不支持：需要熔炉、高炉、烟熏炉等其它机器才能得到的中间产物。这类缺口会中止并在确认界面/聊天栏中指出缺少哪个物品。
-- 存储入口为超维存储终端、潜影集装箱和潜影终端。
+- 存储入口为超维存储终端、潜影集装箱、潜影终端、大型板条箱和本地终端。大型板条箱仅支持单次补料。
 
 ## 实现要点
 
@@ -62,6 +62,13 @@ Minecraft 1.21.1 下的验证组合为 AnvilCraft `snapshot.2854`、`snapshot.28
 - **超时保护**：等待规划回执或服务端接单超时会提示玩家。已经接单的批量合成可以继续运行至作业完成。
 
 ## 更新日志
+
+### 1.0.3
+
+- 模组列表和配置标题统一显示 AnvilCraft:AutoTree，布局预览显示完整仓储底板。
+- 大型板条箱和本地终端新增木色合成树，支持单次自动补料。并行度为潜影的 1/12，向下取整且最低为 1，默认每刻 7 次。
+- 超维存储和潜影集装箱可通过 JEI 紫色「+」为多方块制作及转换配方准备一套材料。补料后按堆叠上限分装至一个或多个空潜影盒，放入合成表空槽。预览会报告缺少的空盒或空槽数量。
+- 联机协议已更新，客户端和服务端需同时升级。
 
 ### 1.0.2 · AnvilAutoTree 第二版
 
@@ -82,4 +89,4 @@ $env:JAVA_HOME='C:\Program Files\Zulu\zulu-21'
 gradle build --no-daemon --console=plain
 ```
 
-产物位于 `build/libs/anvilautotree-1.0.2.jar`。在 `mods/` 中用它替换旧版 AnvilAutoCraft，并保留 AnvilCraft 和 JEI。
+产物位于 `build/libs/anvilautotree-1.0.3.jar`。在 `mods/` 中用它替换旧版 AnvilAutoCraft，并保留 AnvilCraft 和 JEI。

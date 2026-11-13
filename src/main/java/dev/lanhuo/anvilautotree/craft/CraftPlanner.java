@@ -66,12 +66,23 @@ public final class CraftPlanner {
                     List.of(Component.translatable("anvilautotree.error.unsupported_batch")), false, null);
             }
         }
+        return planner.planMaterials(target, stonecutter, quantity, output, root, preview, quantity > 1);
+    }
+
+    static CraftPlan planStructure(ServerLevel level, StorageAccess storage, RecipeHolder<?> recipe, ItemStack icon,
+                                   List<IngredientChoice> materials) {
+        return new CraftPlanner(level, storage).planMaterials(recipe, false, 1, icon, materials, List.of(), false);
+    }
+
+    private CraftPlan planMaterials(RecipeHolder<?> target, boolean stonecutter, int quantity, ItemStack output,
+                                    List<IngredientChoice> root, List<Component> initialPreview, boolean produceTarget) {
+        var preview = new ArrayList<>(initialPreview);
         List<Component> errors = new ArrayList<>();
         List<CraftTreeNode> rootChildren = new ArrayList<>();
         for (Map.Entry<StackKey, Integer> entry : aggregate(root).entrySet()) {
             StackKey key = entry.getKey();
             long required = (long) entry.getValue() * quantity;
-            long available = planner.available(key);
+            long available = this.available(key);
             if (available < required) {
                 preview.add(Component.translatable(
                     "anvilautotree.preview.missing",
@@ -80,8 +91,8 @@ public final class CraftPlanner {
                 ));
             }
             try {
-                rootChildren.add(planner.ensure(key, required));
-                planner.reserved.merge(key, required, Long::sum);
+                rootChildren.add(this.ensure(key, required));
+                this.reserved.merge(key, required, Long::sum);
             } catch (MissingRecipeException exception) {
                 errors.add(exception.toComponent());
                 rootChildren.add(exception.missingNode());
@@ -90,14 +101,14 @@ public final class CraftPlanner {
                 break;
             }
         }
-        if (quantity > 1 && errors.isEmpty()) {
-            if (planner.steps.size() >= AutoCraftConfig.MAX_STEPS.get()) {
+        if (produceTarget && errors.isEmpty()) {
+            if (this.steps.size() >= AutoCraftConfig.MAX_STEPS.get()) {
                 errors.add(Component.translatable("anvilautotree.error.too_complex"));
             } else {
-                planner.steps.add(new CraftStep(root, output, quantity, stonecutter, target.id()));
+                this.steps.add(new CraftStep(root, output, quantity, stonecutter, target.id()));
             }
         }
-        for (CraftStep step : planner.steps) {
+        for (CraftStep step : this.steps) {
             preview.add(Component.translatable(
                 "anvilautotree.preview.craft",
                 step.output().getHoverName(),
@@ -108,12 +119,12 @@ public final class CraftPlanner {
         CraftTreeNode tree = new CraftTreeNode(
             output.copyWithCount(1),
             (long) output.getCount() * quantity,
-            planner.initialCount(StackKey.of(output)),
-            quantity > 1 ? quantity : 0,
+            this.initialCount(StackKey.of(output)),
+            produceTarget ? quantity : 0,
             false,
             rootChildren
         );
-        return new CraftPlan(planner.steps, preview, errors, true, tree);
+        return new CraftPlan(this.steps, preview, errors, true, tree);
     }
 
     private ItemStack batchOutput(Recipe<?> recipe, List<IngredientChoice> choices) {

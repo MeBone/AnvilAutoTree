@@ -1,6 +1,8 @@
 package dev.lanhuo.anvilautotree.storage;
 
-import dev.dubhe.anvilcraft.block.entity.storage.ShulkerContainerBlockEntity;
+import dev.dubhe.anvilcraft.block.entity.storage.StorageBlockEntity;
+import dev.dubhe.anvilcraft.saved.storage.LargeCrateStorage;
+import dev.lanhuo.anvilautotree.net.StorageKind;
 import dev.dubhe.anvilcraft.rpc.StorageServerStub;
 import dev.dubhe.anvilcraft.saved.storage.BaseStorage;
 import dev.dubhe.anvilcraft.saved.storage.HyperdimensionStorage;
@@ -37,7 +39,7 @@ public final class StorageLookup {
                     // Read the current view. A shulker terminal can change targets after opening.
                     Object view = remote.view.invoke(null, player.registryAccess(), playerId, position);
                     if (remote.primary.invoke(view) instanceof BaseStorage<?> storage
-                        && (storage instanceof HyperdimensionStorage || storage instanceof ShulkerContainerStorage)) {
+                        && kindOf(storage).isPresent()) {
                         return Optional.of(storage);
                     }
                     return Optional.empty();
@@ -52,11 +54,20 @@ public final class StorageLookup {
         }
 
         if (player.level().hasChunkAt(sourcePos) && player.canInteractWithBlock(sourcePos, 4.0)
-            && player.level().getBlockEntity(sourcePos) instanceof ShulkerContainerBlockEntity container
+            && player.level().getBlockEntity(sourcePos) instanceof StorageBlockEntity container
             && container.getId() != null) {
-            return Storages.get().get(container.getId()).filter(ShulkerContainerStorage.class::isInstance);
+            return Storages.get().get(container.getId()).filter(storage -> kindOf(storage).isPresent());
         }
         return Optional.empty();
+    }
+
+    public static Optional<StorageKind> kindOf(BaseStorage<?> storage) {
+        return switch (storage) {
+            case HyperdimensionStorage ignored -> Optional.of(StorageKind.HYPERDIMENSION);
+            case ShulkerContainerStorage ignored -> Optional.of(StorageKind.SHULKER);
+            case LargeCrateStorage ignored -> Optional.of(StorageKind.LARGE_CRATE);
+            default -> Optional.empty();
+        };
     }
 
     private record RemoteStorage(Field sessions, Method view, Method primary) {
