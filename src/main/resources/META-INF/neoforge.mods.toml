@@ -10,7 +10,7 @@ authors = "${mod_authors}"
 description = '''${mod_description}'''
 
 [[mixins]]
-config = "anvilautocraft.jei.mixins.json"
+config = "anvilautotree.jei.mixins.json"
 
 [[dependencies.${mod_id}]]
 modId = "neoforge"

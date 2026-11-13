@@ -6,4 +6,4 @@ pluginManagement {
     }
 }
 
-rootProject.name = 'anvilcraft-this-is-a-tree'
+rootProject.name = 'AnvilAutoTree'
