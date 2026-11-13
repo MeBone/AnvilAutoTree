@@ -1,4 +1,6 @@
-# AnvilCraft Auto Craft
+# 铁砧工艺：这是棵树
+
+**AnvilCraft: This Is a Tree**
 
 给铁砧工艺（AnvilCraft）的超维存储和潜影集装箱增加自动补料。在 JEI 里用「+」快捷合成时，如果材料不够，会先确认、再按合成链在后台把缺失的物品造出来，最后自动把材料填进合成格。
 
@@ -26,7 +28,7 @@ Minecraft 1.21.1 下的验证组合为 AnvilCraft `snapshot.2854`、`snapshot.28
 
 ## 配置
 
-在「模组」列表中选择 **AnvilCraft Auto Craft → 配置 → 客户端**。在预览里拖标题栏定位、拖边角改尺寸，然后点「保存布局」。临时移动游戏中的合成树只影响当前窗口。
+在「模组」列表中选择 **铁砧工艺：这是棵树 → 配置 → 客户端**。在预览里拖标题栏定位、拖边角改尺寸，然后点「保存布局」。临时移动游戏中的合成树只影响当前窗口。
 
 `config/anvilautocraft-common.toml`：
 
@@ -61,6 +63,8 @@ Minecraft 1.21.1 下的验证组合为 AnvilCraft `snapshot.2854`、`snapshot.28
 
 ## 更新日志
 
+- `1.0.13`：项目更名为铁砧工艺：这是棵树。窗口复用砧库渲染器及其布局，仅在位置或尺寸变化时更新。
+
 - `1.0.12`：合成树及布局预览的外框和操作按钮接入砧库悬浮窗渲染器。未安装 AnvilLib UI 的环境沿用内置边框。
 - `1.0.11`：JEI 紫色「+」支持在材料充足时打开合成树。数量改用文本框，大合成树保留可读的节点尺寸。
 - `1.0.10`：数量恢复为物品图标右下角的白字阴影样式，绘制在图标上层。
@@ -82,4 +86,4 @@ $env:JAVA_HOME='C:\Program Files\Zulu\zulu-21'
 gradle build --no-daemon --console=plain
 ```
 
-产物位于 `build/libs/anvilautocraft-1.0.12.jar`。在 `mods/` 中用它替换旧版 AnvilAutoCraft，并保留 AnvilCraft 和 JEI。
+产物位于 `build/libs/anvilautocraft-1.0.14.jar`。在 `mods/` 中用它替换旧版 AnvilAutoCraft，并保留 AnvilCraft 和 JEI。

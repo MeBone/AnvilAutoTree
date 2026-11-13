@@ -32,7 +32,7 @@
   "anvilautocraft.error.no_recipe": "Missing %s and no recipe is available",
   "anvilautocraft.error.cycle": "Missing %s and the recipes are cyclic, aborted",
   "anvilautocraft.error.too_complex": "The crafting chain is too complex, aborted",
-  "anvilautocraft.configuration.title": "%s Settings",
+  "anvilautocraft.configuration.title": "AnvilCraft: This Is a Tree Settings",
   "anvilautocraft.configuration.section.anvilautocraft.client.toml": "Client",
   "anvilautocraft.configuration.section.anvilautocraft.common.toml": "Common",
   "anvilautocraft.configuration.craftTree": "Crafting tree window",

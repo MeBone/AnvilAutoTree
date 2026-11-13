@@ -103,6 +103,8 @@ public final class CraftTreeOverlay {
     /** 已经点过「开始合成」、正在等服务端回执，避免连点发出多次合成请求。 */
     private boolean busy;
 
+    private AnvilLibWindow windowChrome;
+    private Footer footer;
     private int panelX;
     private int panelY;
     private int panelWidth;
@@ -199,6 +201,7 @@ public final class CraftTreeOverlay {
     }
 
     private void initQuantityInput(int initialValue) {
+        footer = null;
         quantityInput = new EditBox(Minecraft.getInstance().font, 0, 0, QUANTITY_WIDTH, BUTTON_HEIGHT,
             Component.translatable("anvilautocraft.gui.quantity_hint", CraftRequestPayload.MAX_QUANTITY));
         quantityInput.setMaxLength(2);
@@ -363,9 +366,8 @@ public final class CraftTreeOverlay {
 
         graphics.pose().pushPose();
         graphics.pose().translate(0, 0, 300);
-        boolean useAnvilLibWindow = ModList.get().isLoaded("anvillib_ui");
-        if (useAnvilLibWindow) {
-            AnvilLibWindow.render(graphics, panelX, panelY, panelWidth, panelHeight);
+        if (windowChrome != null) {
+            windowChrome.render(graphics);
         } else {
             graphics.fill(panelX + 2, panelY + 2, panelX + panelWidth + 2, panelY + panelHeight + 2, 0x66000000);
             bevel(graphics, panelX, panelY, panelWidth, panelHeight, theme.frame(), LIGHT_EDGE, DARK_EDGE);
@@ -413,7 +415,7 @@ public final class CraftTreeOverlay {
             graphics.renderTooltip(font, status, mouseX, mouseY);
         }
 
-        renderFooter(graphics, font, mouseX, mouseY, useAnvilLibWindow);
+        renderFooter(graphics, font, mouseX, mouseY);
         renderResizeGrip(graphics);
         if (root >= 0) {
             renderTooltip(graphics, font, mouseX, mouseY, viewX, viewY, viewWidth, viewHeight);
@@ -684,17 +686,15 @@ public final class CraftTreeOverlay {
         return Math.max(12, (int) Math.min(viewWidth, viewWidth * (long) viewWidth / total));
     }
 
-    private void renderFooter(GuiGraphics graphics, Font font, int mouseX, int mouseY, boolean useAnvilLibWindow) {
-        Footer footer = footer();
-        layoutQuantityInput(footer.quantity());
+    private void renderFooter(GuiGraphics graphics, Font font, int mouseX, int mouseY) {
         renderButton(graphics, font, quantity > 1 ? "anvilautocraft.gui.confirm_batch" : "anvilautocraft.gui.confirm",
             footer.confirm(), mouseX, mouseY, !layoutPreview && confirmEnabled && validQuantityInput && !busy, false,
-            useAnvilLibWindow);
+            0);
         quantityInput.render(graphics, mouseX, mouseY, 0);
         renderButton(graphics, font, onlyMissing ? "anvilautocraft.gui.filter_all" : "anvilautocraft.gui.filter_only",
-            footer.filter(), mouseX, mouseY, !layoutPreview, onlyMissing, useAnvilLibWindow);
+            footer.filter(), mouseX, mouseY, !layoutPreview, onlyMissing, 1);
         renderButton(graphics, font, "anvilautocraft.gui.cancel", footer.cancel(), mouseX, mouseY, !layoutPreview, false,
-            useAnvilLibWindow);
+            2);
         if (!layoutPreview && inRect(mouseX, mouseY, footer.quantity())) {
             graphics.renderTooltip(font, Component.translatable("anvilautocraft.gui.quantity_hint",
                 CraftRequestPayload.MAX_QUANTITY), mouseX, mouseY);
@@ -711,14 +711,14 @@ public final class CraftTreeOverlay {
 
     private void renderButton(
         GuiGraphics graphics, Font font, String key, Rect2i bounds,
-        int mouseX, int mouseY, boolean enabled, boolean selected, boolean useAnvilLibWindow
+        int mouseX, int mouseY, boolean enabled, boolean selected, int index
     ) {
         int x = bounds.getX();
         int y = bounds.getY();
         int width = bounds.getWidth();
         boolean hovered = enabled && inRect(mouseX, mouseY, bounds);
-        if (useAnvilLibWindow) {
-            AnvilLibWindow.renderButton(graphics, bounds, enabled, hovered, selected);
+        if (windowChrome != null) {
+            windowChrome.renderButton(index, graphics, enabled, hovered, selected);
         } else {
             int fill = SILVER;
             if (!enabled) {
@@ -747,7 +747,7 @@ public final class CraftTreeOverlay {
         return font.plainSubstrByWidth(text, Math.max(0, width - font.width("…"))) + "…";
     }
 
-    private Footer footer() {
+    private Footer createFooter() {
         int x = panelX + PADDING;
         int y = panelY + panelHeight - FOOTER + 3;
         int total = Math.max(4, panelWidth - PADDING * 2 - FOOTER_GAP * 3);
@@ -777,11 +777,9 @@ public final class CraftTreeOverlay {
             return inIgnoreWindow(mouseX, mouseY);
         }
         ensurePlaced();
-        Footer footer = footer();
         boolean validBeforeClick = validQuantityInput;
         if (!layoutPreview && inRect(mouseX, mouseY, footer.quantity())) {
             pressConsumed = true;
-            layoutQuantityInput(footer.quantity());
             boolean alreadyFocused = quantityInput.isFocused();
             quantityInput.setFocused(true);
             quantityInput.mouseClicked(mouseX, mouseY, button);
@@ -1105,12 +1103,28 @@ public final class CraftTreeOverlay {
         Minecraft minecraft = Minecraft.getInstance();
         int screenWidth = minecraft.getWindow().getGuiScaledWidth();
         int screenHeight = minecraft.getWindow().getGuiScaledHeight();
+        int previousX = panelX;
+        int previousY = panelY;
+        int previousWidth = panelWidth;
+        int previousHeight = panelHeight;
         panelWidth = Math.min(requestedWidth, screenWidth);
         panelHeight = Math.min(requestedHeight, screenHeight);
         int defaultX = screenWidth - panelWidth - 12;
         int defaultY = (screenHeight - panelHeight) / 2;
         panelX = clampInt(requestedX == AutoCraftClientConfig.AUTO_POSITION ? defaultX : requestedX, 0, screenWidth - panelWidth);
         panelY = clampInt(requestedY == AutoCraftClientConfig.AUTO_POSITION ? defaultY : requestedY, 0, screenHeight - panelHeight);
+
+        if (quantityInput != null && (footer == null || panelX != previousX || panelY != previousY
+            || panelWidth != previousWidth || panelHeight != previousHeight)) {
+            footer = createFooter();
+            layoutQuantityInput(footer.quantity());
+            if (windowChrome == null && ModList.get().isLoaded("anvillib_ui")) {
+                windowChrome = new AnvilLibWindow();
+            }
+            if (windowChrome != null) {
+                windowChrome.layout(panelX, panelY, panelWidth, panelHeight, footer.confirm(), footer.filter(), footer.cancel());
+            }
+        }
 
         if (root < 0 || contentWidth <= 0 || contentHeight <= 0) {
             scale = 1.0F;

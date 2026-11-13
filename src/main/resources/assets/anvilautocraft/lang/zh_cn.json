@@ -32,7 +32,7 @@
   "anvilautocraft.error.no_recipe": "缺少 %s，且没有可用的合成配方",
   "anvilautocraft.error.cycle": "缺少 %s，配方互为循环且无法打破，已中止",
   "anvilautocraft.error.too_complex": "合成链过于复杂，已中止",
-  "anvilautocraft.configuration.title": "%s 配置",
+  "anvilautocraft.configuration.title": "铁砧工艺：这是棵树 · 配置",
   "anvilautocraft.configuration.section.anvilautocraft.client.toml": "客户端",
   "anvilautocraft.configuration.section.anvilautocraft.common.toml": "通用",
   "anvilautocraft.configuration.craftTree": "合成树窗口",
