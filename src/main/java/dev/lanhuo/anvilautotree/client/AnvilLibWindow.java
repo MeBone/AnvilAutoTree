@@ -8,13 +8,30 @@ import net.minecraft.client.renderer.Rect2i;
 /** Keeps renderer scopes and their geometry for one crafting window. */
 final class AnvilLibWindow {
     private final ButtonRenderer.Scope window = new FlyoutRenderer().shaded1px().open();
-    private final Button[] buttons = {new Button(), new Button(), new Button()};
+    private final Button[] buttons;
+
+    AnvilLibWindow() {
+        this(3);
+    }
+
+    AnvilLibWindow(int buttonCount) {
+        buttons = new Button[buttonCount];
+        java.util.Arrays.setAll(buttons, index -> new Button());
+    }
 
     void layout(int x, int y, int width, int height, Rect2i confirm, Rect2i filter, Rect2i cancel) {
-        window.pos(x, y).size(width, height);
+        layoutFrame(x, y, width, height);
         buttons[0].layout(confirm);
         buttons[1].layout(filter);
         buttons[2].layout(cancel);
+    }
+
+    void layoutFrame(int x, int y, int width, int height) {
+        window.pos(x, y).size(width, height);
+    }
+
+    void layoutButton(int index, Rect2i bounds) {
+        buttons[index].layout(bounds);
     }
 
     void render(GuiGraphics graphics) {

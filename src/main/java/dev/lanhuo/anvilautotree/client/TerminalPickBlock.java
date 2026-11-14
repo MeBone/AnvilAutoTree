@@ -5,6 +5,7 @@ import dev.dubhe.anvilcraft.client.rpc.TerminalJeiStorageCache;
 import dev.dubhe.anvilcraft.init.item.ModComponents;
 import dev.dubhe.anvilcraft.item.HyperdimensionTerminalItem;
 import dev.dubhe.anvilcraft.item.TerminalItem;
+import dev.dubhe.anvilcraft.recipe.multiblock.Multiblock4DRecipe;
 import dev.dubhe.anvilcraft.recipe.multiblock.MultiblockConversionRecipe;
 import dev.dubhe.anvilcraft.recipe.multiblock.MultiblockRecipe;
 import dev.dubhe.anvilcraft.recipe.multiblock.MultiblockUtil;
@@ -106,6 +107,7 @@ final class TerminalPickBlock {
             case ShapelessRecipe ignored -> ItemStack.isSameItemSameComponents(recipe.getResultItem(registries), target);
             case StonecutterRecipe ignored -> ItemStack.isSameItemSameComponents(recipe.getResultItem(registries), target);
             case MultiblockRecipe ignored -> ItemStack.isSameItemSameComponents(recipe.getResultItem(registries), target);
+            case Multiblock4DRecipe ignored -> ItemStack.isSameItemSameComponents(recipe.getResultItem(registries), target);
             case MultiblockConversionRecipe conversion -> MultiblockUtil.ingredientList(conversion.getOutputPattern(), registries)
                 .stream().anyMatch(stack -> ItemStack.isSameItemSameComponents(stack, target));
             default -> false;

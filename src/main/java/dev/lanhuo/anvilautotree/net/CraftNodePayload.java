@@ -3,6 +3,8 @@ package dev.lanhuo.anvilautotree.net;
 import dev.lanhuo.anvilautotree.craft.CraftTreeNode;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Optional;
+import net.minecraft.resources.ResourceLocation;
 import net.minecraft.network.RegistryFriendlyByteBuf;
 import net.minecraft.network.codec.ByteBufCodecs;
 import net.minecraft.network.codec.StreamCodec;
@@ -24,9 +26,14 @@ public record CraftNodePayload(
     long required,
     long stored,
     int crafts,
-    boolean missing
+    boolean missing,
+    Optional<ResourceLocation> recipeId
 ) {
-    public static final StreamCodec<RegistryFriendlyByteBuf, CraftNodePayload> STREAM_CODEC = StreamCodec.composite(
+    public CraftNodePayload(int parent, ItemStack stack, long required, long stored, int crafts, boolean missing) {
+        this(parent, stack, required, stored, crafts, missing, Optional.empty());
+    }
+
+    private static final StreamCodec<RegistryFriendlyByteBuf, CraftNodePayload> BASE_CODEC = StreamCodec.composite(
         ByteBufCodecs.VAR_INT,
         CraftNodePayload::parent,
         ItemStack.OPTIONAL_STREAM_CODEC,
@@ -40,6 +47,19 @@ public record CraftNodePayload(
         ByteBufCodecs.BOOL,
         CraftNodePayload::missing,
         CraftNodePayload::new
+    );
+    private static final StreamCodec<RegistryFriendlyByteBuf, Optional<ResourceLocation>> RECIPE_CODEC =
+        ByteBufCodecs.optional(ResourceLocation.STREAM_CODEC).cast();
+    public static final StreamCodec<RegistryFriendlyByteBuf, CraftNodePayload> STREAM_CODEC = StreamCodec.of(
+        (buf, node) -> {
+            BASE_CODEC.encode(buf, node);
+            RECIPE_CODEC.encode(buf, node.recipeId());
+        },
+        buf -> {
+            var node = BASE_CODEC.decode(buf);
+            return new CraftNodePayload(node.parent(), node.stack(), node.required(), node.stored(), node.crafts(),
+                node.missing(), RECIPE_CODEC.decode(buf));
+        }
     );
 
     public static final StreamCodec<RegistryFriendlyByteBuf, List<CraftNodePayload>> LIST_STREAM_CODEC =
@@ -58,7 +78,7 @@ public record CraftNodePayload(
 
     private static void append(CraftTreeNode node, int parent, List<CraftNodePayload> out) {
         int index = out.size();
-        out.add(new CraftNodePayload(parent, node.stack(), node.required(), node.stored(), node.crafts(), node.missing()));
+        out.add(new CraftNodePayload(parent, node.stack(), node.required(), node.stored(), node.crafts(), node.missing(), node.recipeId()));
         for (CraftTreeNode child : node.children()) {
             append(child, index, out);
         }

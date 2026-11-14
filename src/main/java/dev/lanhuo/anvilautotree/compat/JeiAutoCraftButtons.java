@@ -2,6 +2,7 @@ package dev.lanhuo.anvilautotree.compat;
 
 import java.util.function.Supplier;
 import dev.dubhe.anvilcraft.recipe.multiblock.MultiblockRecipe;
+import dev.dubhe.anvilcraft.recipe.multiblock.Multiblock4DRecipe;
 import dev.dubhe.anvilcraft.recipe.multiblock.MultiblockConversionRecipe;
 import dev.lanhuo.anvilautotree.client.AutoCraftClient;
 import mezz.jei.api.constants.RecipeTypes;
@@ -54,7 +55,8 @@ final class JeiAutoCraftButtons {
                 if (!(layout.getRecipe() instanceof RecipeHolder<?> holder)) {
                     return null;
                 }
-                if (holder.value() instanceof MultiblockRecipe || holder.value() instanceof MultiblockConversionRecipe) {
+                if (holder.value() instanceof MultiblockRecipe || holder.value() instanceof MultiblockConversionRecipe
+                    || holder.value() instanceof Multiblock4DRecipe) {
                     return new StructureButton(holder, runtime);
                 }
                 if (!type.equals(RecipeTypes.CRAFTING) && !type.equals(RecipeTypes.STONECUTTING)) {

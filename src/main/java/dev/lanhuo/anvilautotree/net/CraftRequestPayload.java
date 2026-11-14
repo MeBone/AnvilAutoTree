@@ -3,6 +3,9 @@ package dev.lanhuo.anvilautotree.net;
 import com.mojang.datafixers.util.Either;
 import dev.lanhuo.anvilautotree.AnvilAutoTree;
 import java.util.Optional;
+import java.util.Map;
+import java.util.HashMap;
+import dev.lanhuo.anvilautotree.craft.RecipePreference;
 import java.util.UUID;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.UUIDUtil;
@@ -24,13 +27,18 @@ import net.minecraft.resources.ResourceLocation;
  * @param storageId 规划时为空，确认执行时为玩家预览的存储
  */
 public record CraftRequestPayload(
-    Either<BlockPos, UUID> source, ResourceLocation recipeId, boolean stonecutter, Optional<UUID> storageId, int quantity, int requestId, boolean toGrid
+    Either<BlockPos, UUID> source, ResourceLocation recipeId, boolean stonecutter, Optional<UUID> storageId, int quantity, int requestId, boolean toGrid, Map<String, ResourceLocation> preferences
 )
     implements CustomPacketPayload {
     public static final Type<CraftRequestPayload> TYPE = new Type<>(
         ResourceLocation.fromNamespaceAndPath(AnvilAutoTree.MOD_ID, "craft_request")
     );
-    public static final StreamCodec<RegistryFriendlyByteBuf, CraftRequestPayload> STREAM_CODEC = StreamCodec.composite(
+    public CraftRequestPayload(Either<BlockPos, UUID> source, ResourceLocation recipeId, boolean stonecutter,
+                               Optional<UUID> storageId, int quantity, int requestId, boolean toGrid) {
+        this(source, recipeId, stonecutter, storageId, quantity, requestId, toGrid, Map.of());
+    }
+
+    private static final StreamCodec<RegistryFriendlyByteBuf, CraftRequestPayload> BASE_CODEC = StreamCodec.composite(
         ByteBufCodecs.either(BlockPos.STREAM_CODEC, UUIDUtil.STREAM_CODEC),
         CraftRequestPayload::source,
         ResourceLocation.STREAM_CODEC,
@@ -45,6 +53,20 @@ public record CraftRequestPayload(
         CraftRequestPayload::requestId,
         (source, recipeId, flags, storageId, quantity, requestId) -> new CraftRequestPayload(
             source, recipeId, (flags & 1) != 0, storageId, quantity, requestId, (flags & 2) != 0)
+    );
+
+    private static final StreamCodec<RegistryFriendlyByteBuf, Map<String, ResourceLocation>> PREFERENCES_CODEC =
+        ByteBufCodecs.map(HashMap::new, ByteBufCodecs.stringUtf8(512), ResourceLocation.STREAM_CODEC, RecipePreference.MAX_ENTRIES);
+    public static final StreamCodec<RegistryFriendlyByteBuf, CraftRequestPayload> STREAM_CODEC = StreamCodec.of(
+        (buf, request) -> {
+            BASE_CODEC.encode(buf, request);
+            PREFERENCES_CODEC.encode(buf, request.preferences());
+        },
+        buf -> {
+            var request = BASE_CODEC.decode(buf);
+            return new CraftRequestPayload(request.source(), request.recipeId(), request.stonecutter(), request.storageId(),
+                request.quantity(), request.requestId(), request.toGrid(), PREFERENCES_CODEC.decode(buf));
+        }
     );
 
     public boolean pickBlock() {

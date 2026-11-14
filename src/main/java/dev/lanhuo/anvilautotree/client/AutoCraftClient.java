@@ -7,13 +7,13 @@ import dev.lanhuo.anvilautotree.net.CraftRequestPayload;
 import dev.lanhuo.anvilautotree.net.CraftResponsePayload;
 import java.util.Optional;
 import java.util.UUID;
-import java.util.function.Function;
-import mezz.jei.api.recipe.transfer.IRecipeTransferError;
+import java.util.function.Predicate;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.screens.Screen;
 import net.minecraft.client.gui.screens.inventory.AbstractContainerScreen;
 import net.minecraft.core.BlockPos;
 import net.minecraft.network.chat.Component;
+import net.minecraft.resources.ResourceLocation;
 import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.inventory.AbstractContainerMenu;
 import net.minecraft.world.item.crafting.RecipeHolder;
@@ -42,6 +42,7 @@ public final class AutoCraftClient {
     private static boolean planFailed;
     private static boolean confirmed;
     private static boolean toGrid;
+    private static boolean plannedStonecutter;
     private static int quantity = 1;
     private static int requestSequence;
     private static int requestId;
@@ -58,7 +59,7 @@ public final class AutoCraftClient {
         BlockPos sourcePos,
         RecipeHolder<?> recipe,
         Player player,
-        Function<Player, IRecipeTransferError> transfer
+        Predicate<Player> transfer
     ) {
         plan(container, Either.left(sourcePos), recipe, player, transfer);
     }
@@ -81,7 +82,7 @@ public final class AutoCraftClient {
         Either<BlockPos, UUID> source,
         RecipeHolder<?> recipe,
         Player player,
-        Function<Player, IRecipeTransferError> transfer
+        Predicate<Player> transfer
     ) {
         if (pending != null) {
             if (confirmed || (pending.container() == container && pending.recipe().id().equals(recipe.id()) && !planFailed)) {
@@ -105,6 +106,16 @@ public final class AutoCraftClient {
             return;
         }
         quantity = selected;
+        replan();
+    }
+
+    static void selectRecipePreference(String key, ResourceLocation selection) {
+        if (pending == null || confirmed) return;
+        AutoCraftClientConfig.saveRecipePreference(key, selection);
+        replan();
+    }
+
+    private static void replan() {
         requestId = ++requestSequence;
         plannedStorage = Optional.empty();
         planFailed = false;
@@ -116,12 +127,8 @@ public final class AutoCraftClient {
     private static void sendRequest(Optional<UUID> storageId) {
         PacketDistributor.sendToServer(new CraftRequestPayload(
             pending.source(), pending.recipe().id(), pending.recipe().value() instanceof StonecutterRecipe,
-            storageId, quantity, requestId, toGrid
+            storageId, quantity, requestId, toGrid, AutoCraftClientConfig.recipePreferences()
         ));
-    }
-
-    public static IRecipeTransferError missingIngredients() {
-        return new AutoCraftTransferError(Component.translatable("anvilautotree.jei.tooltip"));
     }
 
     public static void onResponse(CraftResponsePayload payload) {
@@ -195,16 +202,16 @@ public final class AutoCraftClient {
             clear();
             return;
         }
-        IRecipeTransferError error;
+        boolean transferred;
         try {
-            error = pending.transfer().apply(player);
+            transferred = pending.transfer().test(player);
         } catch (RuntimeException exception) {
             AnvilAutoTree.LOGGER.warn("Unable to replay the registered JEI recipe transfer", exception);
             player.displayClientMessage(Component.translatable("anvilautotree.status.replay_timeout"), false);
             clear();
             return;
         }
-        if (error == null) {
+        if (transferred) {
             player.displayClientMessage(Component.translatable("anvilautotree.status.done"), false);
             clear();
             return;
@@ -223,6 +230,10 @@ public final class AutoCraftClient {
         }
         waitTicks = -1;
         plannedStorage = payload.storage().id();
+        var level = Minecraft.getInstance().level;
+        plannedStonecutter = level != null && !payload.tree().isEmpty()
+            && payload.tree().getFirst().recipeId().flatMap(level.getRecipeManager()::byKey)
+                .map(holder -> holder.value() instanceof StonecutterRecipe).orElse(false);
         // 规划失败时也把树显示出来：缺失的物品会以红框节点出现，原因写在面板底部，
         // 不再只靠聊天栏文字提示。
         Component message = payload.success() ? null : payload.message();
@@ -256,7 +267,7 @@ public final class AutoCraftClient {
         boolean gridFilled = payload.phase() == CraftResponsePayload.PHASE_GRID_FILLED;
         if (payload.success() && (gridFilled || toGrid || pending.transfer() == null) && minecraft.screen instanceof
             dev.dubhe.anvilcraft.client.gui.screen.StorageScreen screen && screen.getMenu() == pending.container()) {
-            screen.showCraftingAfterTransfer(gridFilled && pending.recipe().value() instanceof StonecutterRecipe);
+            screen.showCraftingAfterTransfer(gridFilled && plannedStonecutter);
         }
         if (!payload.success() || gridFilled || quantity > 1 || pending.transfer() == null) {
             clear();
@@ -295,6 +306,7 @@ public final class AutoCraftClient {
         planFailed = false;
         confirmed = false;
         toGrid = false;
+        plannedStonecutter = false;
         quantity = 1;
         previewDelay = 0;
         replayDelay = -1;
@@ -304,7 +316,7 @@ public final class AutoCraftClient {
 
     private record Pending(
         AbstractContainerMenu container,
-        Function<Player, IRecipeTransferError> transfer,
+        Predicate<Player> transfer,
         RecipeHolder<?> recipe,
         Either<BlockPos, UUID> source
     ) {

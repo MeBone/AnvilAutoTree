@@ -51,6 +51,10 @@ public final class AutoCraftClientEvents {
 
     @SubscribeEvent
     public static void onKeyPressed(ScreenEvent.KeyPressed.Pre event) {
+        if (CraftTreeOverlay.LIVE.recipeChoicesKeyPressed(event.getKeyCode())) {
+            event.setCanceled(true);
+            return;
+        }
         if (CraftTreeOverlay.LIVE.quantityKeyPressed(event.getKeyCode(), event.getScanCode(), event.getModifiers())) {
             event.setCanceled(true);
             return;

@@ -1,6 +1,10 @@
 package dev.lanhuo.anvilautotree.client;
 
 import dev.lanhuo.anvilautotree.AnvilAutoTree;
+import dev.lanhuo.anvilautotree.craft.RecipePreference;
+import java.util.LinkedHashMap;
+import java.util.List;
+import net.minecraft.resources.ResourceLocation;
 import net.minecraft.client.renderer.Rect2i;
 import net.neoforged.api.distmarker.Dist;
 import net.neoforged.fml.ModContainer;
@@ -20,6 +24,7 @@ public final class AutoCraftClientConfig {
     static final ModConfigSpec.IntValue X;
     static final ModConfigSpec.IntValue Y;
     private static final ModConfigSpec SPEC;
+    private static final ModConfigSpec.ConfigValue<List<? extends String>> RECIPE_PREFERENCES;
 
     static {
         ModConfigSpec.Builder builder = new ModConfigSpec.Builder();
@@ -31,6 +36,8 @@ public final class AutoCraftClientConfig {
         Y = builder.comment("Distance from the top edge in GUI pixels; -1 centers vertically.")
             .defineInRange("y", AUTO_POSITION, AUTO_POSITION, 4096);
         builder.pop();
+        RECIPE_PREFERENCES = builder.defineListAllowEmpty("recipePreferences", List.of(),
+            value -> value instanceof String entry && entry.length() <= 768);
         SPEC = builder.build();
     }
 
@@ -40,6 +47,31 @@ public final class AutoCraftClientConfig {
             new ConfigurationScreen(mod, parent, (root, type, config, title) -> type == ModConfig.Type.CLIENT
                 ? new CraftTreeLayoutScreen(root)
                 : new ConfigurationScreen.ConfigurationSectionScreen(root, type, config, title)));
+    }
+
+    static LinkedHashMap<String, ResourceLocation> recipePreferences() {
+        var preferences = new LinkedHashMap<String, ResourceLocation>();
+        for (String entry : RECIPE_PREFERENCES.get()) {
+            int separator = entry.indexOf('=');
+            if (separator <= 0 || separator > 512) continue;
+            var id = ResourceLocation.tryParse(entry.substring(separator + 1));
+            if (id != null && preferences.size() < RecipePreference.MAX_ENTRIES) {
+                preferences.put(entry.substring(0, separator), id);
+            }
+        }
+        return preferences;
+    }
+
+    static void saveRecipePreference(String key, ResourceLocation selection) {
+        var preferences = recipePreferences();
+        preferences.remove(key);
+        if (selection != null) {
+            if (preferences.size() >= RecipePreference.MAX_ENTRIES) preferences.pollFirstEntry();
+            preferences.put(key, selection);
+        }
+        RECIPE_PREFERENCES.set(preferences.entrySet().stream()
+            .map(entry -> entry.getKey() + "=" + entry.getValue()).toList());
+        SPEC.save();
     }
 
     static Rect2i currentLayout() {

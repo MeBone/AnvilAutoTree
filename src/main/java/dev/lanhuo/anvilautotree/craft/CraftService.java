@@ -1,9 +1,9 @@
 package dev.lanhuo.anvilautotree.craft;
 
 import dev.dubhe.anvilcraft.recipe.multiblock.IMultiblockRecipe;
-import dev.dubhe.anvilcraft.recipe.multiblock.MultiblockRecipe;
-import dev.dubhe.anvilcraft.recipe.multiblock.MultiblockConversionRecipe;
 import net.minecraft.world.item.Items;
+import net.minecraft.world.item.ItemStack;
+import net.minecraft.world.item.crafting.StonecutterRecipe;
 import dev.lanhuo.anvilautotree.net.StorageKind;
 import dev.lanhuo.anvilautotree.net.CraftNodePayload;
 import dev.lanhuo.anvilautotree.net.CraftRequestPayload;
@@ -58,7 +58,9 @@ public final class CraftService {
             fail(player, payload, "anvilautotree.error.unknown_recipe", kind);
             return;
         }
-        RecipeHolder<?> recipe = found.get();
+        var original = found.get();
+        RecipeHolder<?> recipe = selectTarget(level, original, payload);
+        boolean stonecutter = recipe == original ? payload.stonecutter() : recipe.value() instanceof StonecutterRecipe;
         boolean structureRecipe = recipe.value() instanceof IMultiblockRecipe;
         if (payload.quantity() < 1 || payload.quantity() > kind.maxOrderQuantity()) {
             String key = structureRecipe ? "anvilautotree.error.invalid_structure_quantity" : "anvilautotree.error.invalid_quantity";
@@ -85,7 +87,7 @@ public final class CraftService {
                 fail(player, payload, "anvilautotree.error.structure_storage", kind);
                 return;
             }
-            if (!(recipe.value() instanceof MultiblockRecipe || recipe.value() instanceof MultiblockConversionRecipe)) {
+            if (!StructurePacking.supports(recipe.value())) {
                 fail(player, payload, "anvilautotree.error.unsupported_recipe", kind);
                 return;
             }
@@ -107,10 +109,14 @@ public final class CraftService {
                 return;
             }
             var icon = result.isEmpty() ? Items.SHULKER_BOX.getDefaultInstance() : result;
-            plan = CraftPlanner.planStructure(level, access, recipe, icon, payload.quantity(), packing.materials());
+            plan = CraftPlanner.planStructure(level, access, recipe, icon, payload.quantity(), packing.materials(), payload.preferences());
         } else {
-            plan = CraftPlanner.plan(level, access, recipe, payload.stonecutter(), payload.quantity(),
-                payload.pickBlock() || payload.quantity() > 1);
+            plan = CraftPlanner.plan(level, access, recipe, stonecutter, payload.quantity(),
+                payload.pickBlock() || payload.quantity() > 1, payload.preferences());
+            if (payload.pickBlock() && !plan.isSuccess() && recipe == original
+                && !payload.preferences().containsKey(RecipePreference.recipe(result))) {
+                plan = tryPickAlternatives(level, access, recipe, result, payload, plan);
+            }
         }
         if (!payload.execute()) {
             PacketDistributor.sendToPlayer(
@@ -133,7 +139,9 @@ public final class CraftService {
             );
             return;
         }
-        boolean fillIngredients = !useInventory && !plan.gridInputs().isEmpty();
+        boolean preferredInputs = !plan.gridInputs().isEmpty() && java.util.stream.IntStream.range(0, recipe.value().getIngredients().size())
+            .anyMatch(slot -> payload.preferences().containsKey(RecipePreference.ingredient(recipe.id(), slot)));
+        boolean fillIngredients = (!useInventory || recipe != original || preferredInputs) && !plan.gridInputs().isEmpty();
         if (plan.steps().isEmpty() && packing == null && !fillIngredients) {
             PacketDistributor.sendToPlayer(
                 player,
@@ -153,16 +161,44 @@ public final class CraftService {
             }
         }
         StructurePacking structure = packing;
+        CraftPlan finalizedPlan = plan;
         CraftJobManager.submit(new CraftJob(player, access, plan.steps(), kind, payload.requestId(), payload.quantity(), payload.pickBlock(),
             structure == null && !fillIngredients ? null : () -> {
                 if (StorageLookup.resolve(player, payload.source()).filter(current -> current == storage).isEmpty()) {
                     return Component.translatable("anvilautotree.error.storage_changed");
                 }
                 return fillIngredients
-                    ? fillGridIngredients(player, sourcePos, plan, recipe, access, payload.stonecutter())
+                    ? fillGridIngredients(player, sourcePos, finalizedPlan, recipe, access, stonecutter)
                     : structure.finish(player, sourcePos, access);
             }, payload.toGrid() ? (output, count) -> placeInGrid(player, payload, output, count, false) : null, fillIngredients));
         PacketDistributor.sendToPlayer(player, CraftResponsePayload.accepted(payload.requestId()));
+    }
+
+    private static CraftPlan tryPickAlternatives(ServerLevel level, StorageAccess access, RecipeHolder<?> original,
+                                                 ItemStack result, CraftRequestPayload payload, CraftPlan initial) {
+        if (result.isEmpty()) return initial;
+        var alternatives = level.getRecipeManager().getRecipes().stream()
+            .filter(holder -> !holder.id().equals(original.id()) && RecipePreference.supports(holder.value())
+                && ItemStack.isSameItemSameComponents(holder.value().getResultItem(level.registryAccess()), result))
+            .sorted(java.util.Comparator.comparing(RecipeHolder::id)).toList();
+        CraftPlan display = initial;
+        for (var candidate : alternatives) {
+            var plan = CraftPlanner.plan(level, access, candidate, candidate.value() instanceof StonecutterRecipe,
+                payload.quantity(), true, payload.preferences());
+            if (plan.isSuccess()) return plan;
+            if (display.tree() == null && plan.tree() != null) display = plan;
+        }
+        return display;
+    }
+
+    private static RecipeHolder<?> selectTarget(ServerLevel level, RecipeHolder<?> original, CraftRequestPayload payload) {
+        if (!RecipePreference.supports(original.value())) return original;
+        ItemStack result = original.value().getResultItem(level.registryAccess());
+        var preferred = payload.preferences().get(RecipePreference.recipe(result));
+        return preferred == null ? original : level.getRecipeManager().byKey(preferred)
+            .filter(holder -> RecipePreference.supports(holder.value()) && ItemStack.isSameItemSameComponents(
+                holder.value().getResultItem(level.registryAccess()), result))
+            .orElse(original);
     }
 
     private static Component fillGridIngredients(ServerPlayer player, net.minecraft.core.BlockPos pos,

@@ -93,5 +93,10 @@
   "anvilautotree.status.batch_grid_fallback": "The crafting grid changed. Results were sent to storage.",
   "anvilautotree.configuration.usePlayerInventory": "Use player inventory",
   "anvilautotree.configuration.usePlayerInventory.tooltip": "Allow the crafting tree to use materials from the player inventory. Off by default.",
-  "anvilautotree.error.ingredients_grid": "Could not fill the recipe from storage. Check the materials or reopen the crafting tree."
+  "anvilautotree.error.ingredients_grid": "Could not fill the recipe from storage. Check the materials or reopen the crafting tree.",
+  "anvilautotree.alternatives.title": "Choose a recipe preference",
+  "anvilautotree.alternatives.automatic": "Automatic",
+  "anvilautotree.alternatives.slot": "%s · Ingredient slot %s",
+  "anvilautotree.alternatives.output": "Recipes for %s",
+  "anvilautotree.alternatives.footer": "%s–%s / %s"
 }

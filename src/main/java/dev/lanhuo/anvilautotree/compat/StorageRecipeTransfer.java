@@ -2,6 +2,7 @@ package dev.lanhuo.anvilautotree.compat;
 
 import dev.lanhuo.anvilautotree.AnvilAutoTree;
 import dev.lanhuo.anvilautotree.client.AutoCraftClient;
+import dev.lanhuo.anvilautotree.client.AutoCraftTransferError;
 import java.lang.reflect.Method;
 import java.lang.reflect.Modifier;
 import java.nio.file.Files;
@@ -13,6 +14,7 @@ import mezz.jei.api.recipe.transfer.IRecipeTransferError;
 import mezz.jei.api.recipe.transfer.IRecipeTransferHandler;
 import net.minecraft.client.gui.screens.Screen;
 import net.minecraft.core.BlockPos;
+import net.minecraft.network.chat.Component;
 import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.inventory.AbstractContainerMenu;
 import net.minecraft.world.inventory.MenuType;
@@ -104,7 +106,7 @@ public final class StorageRecipeTransfer<C extends AbstractContainerMenu, R> imp
             if (doTransfer) {
                 plan(menu, recipe, slots, player, maxTransfer, holder);
             }
-            return AutoCraftClient.missingIngredients();
+            return new AutoCraftTransferError(Component.translatable("anvilautotree.jei.tooltip"));
         }
         return doTransfer ? delegate.transferRecipe(menu, recipe, slots, player, maxTransfer, true) : check;
     }
@@ -122,6 +124,6 @@ public final class StorageRecipeTransfer<C extends AbstractContainerMenu, R> imp
 
     private void plan(C menu, R recipe, IRecipeSlotsView slots, Player player, boolean maxTransfer, RecipeHolder<?> holder) {
         AutoCraftClient.plan(menu, sourcePos, holder, player,
-            who -> delegate.transferRecipe(menu, recipe, slots, who, maxTransfer, true));
+            who -> delegate.transferRecipe(menu, recipe, slots, who, maxTransfer, true) == null);
     }
 }

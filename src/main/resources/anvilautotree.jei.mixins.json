@@ -5,7 +5,8 @@
   "compatibilityLevel": "JAVA_21",
   "plugin": "dev.lanhuo.anvilautotree.mixin.AutoCraftMixinPlugin",
   "client": [
-    "JeiRecipeTransferManagerMixin"
+    "JeiRecipeTransferManagerMixin",
+    "JeiBookmarkInputMixin"
   ],
   "injectors": {
     "defaultRequire": 1

@@ -1,6 +1,8 @@
 package dev.lanhuo.anvilautotree.craft;
 
 import java.util.List;
+import java.util.Optional;
+import net.minecraft.resources.ResourceLocation;
 import net.minecraft.world.item.ItemStack;
 
 /**
@@ -19,15 +21,20 @@ public record CraftTreeNode(
     long stored,
     int crafts,
     boolean missing,
-    List<CraftTreeNode> children
+    List<CraftTreeNode> children,
+    Optional<ResourceLocation> recipeId
 ) {
     public CraftTreeNode {
         stack = stack.copyWithCount(1);
         children = List.copyOf(children);
     }
 
+    public CraftTreeNode withRecipe(ResourceLocation recipeId) {
+        return new CraftTreeNode(stack, required, stored, crafts, missing, children, Optional.of(recipeId));
+    }
+
     public static CraftTreeNode leaf(ItemStack stack, long required, long stored) {
-        return new CraftTreeNode(stack, required, stored, 0, false, List.of());
+        return new CraftTreeNode(stack, required, stored, 0, false, List.of(), Optional.empty());
     }
 
     /**
@@ -36,7 +43,7 @@ public record CraftTreeNode(
      * @param children 这条断掉的合成分支上的下一层（缺失物品自身没有子节点）
      */
     public static CraftTreeNode missing(ItemStack stack, long required, long stored, List<CraftTreeNode> children) {
-        return new CraftTreeNode(stack, required, stored, 0, true, children);
+        return new CraftTreeNode(stack, required, stored, 0, true, children, Optional.empty());
     }
 
     /**

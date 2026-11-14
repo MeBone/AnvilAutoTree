@@ -93,5 +93,10 @@
   "anvilautotree.status.batch_grid_fallback": "合成栏已变化，成品已转入仓储",
   "anvilautotree.configuration.usePlayerInventory": "允许使用玩家物品栏",
   "anvilautotree.configuration.usePlayerInventory.tooltip": "开启后，合成树可以使用玩家物品栏里的材料。默认关闭。",
-  "anvilautotree.error.ingredients_grid": "无法从仓储回填配方材料，请检查仓储库存或重新打开合成树"
+  "anvilautotree.error.ingredients_grid": "无法从仓储回填配方材料，请检查仓储库存或重新打开合成树",
+  "anvilautotree.alternatives.title": "选择默认替代配方",
+  "anvilautotree.alternatives.automatic": "自动选择",
+  "anvilautotree.alternatives.slot": "%s · 原料槽 %s",
+  "anvilautotree.alternatives.output": "%s 的替代配方",
+  "anvilautotree.alternatives.footer": "%s–%s / %s"
 }

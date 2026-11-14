@@ -135,6 +135,7 @@ public final class CraftTreeOverlay {
     private int root = -1;
     private int contentWidth;
     private int contentHeight;
+    private RecipeChoicesWindow recipeChoices;
     private int lastOriginX;
     private int lastOriginY;
 
@@ -276,7 +277,13 @@ public final class CraftTreeOverlay {
         if (!active() || layoutPreview) {
             return false;
         }
-        tryConfirm(false);
+        if (recipeChoices == null) tryConfirm(false);
+        return true;
+    }
+
+    boolean recipeChoicesKeyPressed(int key) {
+        if (recipeChoices == null || !active()) return false;
+        if (key == GLFW.GLFW_KEY_ESCAPE) recipeChoices = null;
         return true;
     }
 
@@ -335,6 +342,7 @@ public final class CraftTreeOverlay {
 
     public void hide() {
         visible = false;
+        recipeChoices = null;
         quantityInput = null;
         nodes = List.of();
         status = null;
@@ -441,9 +449,10 @@ public final class CraftTreeOverlay {
 
         renderFooter(graphics, font, mouseX, mouseY);
         renderResizeGrip(graphics);
-        if (root >= 0) {
+        if (root >= 0 && recipeChoices == null) {
             renderTooltip(graphics, font, mouseX, mouseY, viewX, viewY, viewWidth, viewHeight);
         }
+        if (recipeChoices != null) recipeChoices.render(graphics, mouseX, mouseY);
         graphics.pose().popPose();
     }
 
@@ -657,7 +666,49 @@ public final class CraftTreeOverlay {
         graphics.renderTooltip(font, lines, Optional.empty(), mouseX, mouseY);
     }
 
-    private int nodeAt(int mouseX, int mouseY) {
+    public ItemStack itemAt(double mouseX, double mouseY) {
+        if (layoutPreview || !active() || recipeChoices != null || editingQuantity() || root < 0) {
+            return ItemStack.EMPTY;
+        }
+        if (!inRect(mouseX, mouseY, panelX + PADDING, panelY + HEADER, panelWidth - PADDING * 2, viewHeight())) {
+            return ItemStack.EMPTY;
+        }
+        int node = nodeAt(mouseX, mouseY);
+        return node < 0 ? ItemStack.EMPTY : nodes.get(node).stack().copy();
+    }
+
+    private boolean openRecipeChoices(double mouseX, double mouseY) {
+        if (nodeAt(mouseX, mouseY) >= 0) return false;
+        double x = (mouseX - lastOriginX) / scale;
+        double y = (mouseY - lastOriginY) / scale;
+        double tolerance = 3.0 / scale;
+        // Try the individual child stems before shared horizontal branches.
+        for (boolean shared : new boolean[]{false, true}) {
+            for (var entry : children.entrySet()) {
+                int[] parent = positions.get(entry.getKey());
+                if (parent == null) continue;
+                int startX = parent[0] + NODE / 2;
+                int startY = parent[1] + NODE;
+                for (int child : entry.getValue()) {
+                    int[] end = positions.get(child);
+                    if (end == null) continue;
+                    int endX = end[0] + NODE / 2;
+                    int middleY = (startY + end[1]) / 2;
+                    boolean hit = shared
+                        ? (Math.abs(y - middleY) <= tolerance && x >= Math.min(startX, endX) - tolerance
+                            && x <= Math.max(startX, endX) + tolerance)
+                            || (Math.abs(x - startX) <= tolerance && y >= startY && y <= middleY)
+                        : Math.abs(x - endX) <= tolerance && y >= middleY && y < end[1];
+                    if (!hit) continue;
+                    recipeChoices = RecipeChoicesWindow.open(nodes.get(entry.getKey()), nodes.get(child));
+                    if (recipeChoices != null) return true;
+                }
+            }
+        }
+        return false;
+    }
+
+    private int nodeAt(double mouseX, double mouseY) {
         for (int index = 0; index < nodes.size(); index++) {
             int[] position = positions.get(index);
             if (position == null) {
@@ -719,6 +770,7 @@ public final class CraftTreeOverlay {
             footer.filter(), mouseX, mouseY, !layoutPreview, onlyMissing, 1);
         renderButton(graphics, font, "anvilautotree.gui.cancel", footer.cancel(), mouseX, mouseY, !layoutPreview, false,
             2);
+        if (recipeChoices != null) return;
         if (!layoutPreview && inRect(mouseX, mouseY, footer.quantity())) {
             if (!storageKind.supportsBatch()) {
                 graphics.renderTooltip(font, Component.translatable("anvilautotree.error.crate_single_only"), mouseX, mouseY);
@@ -822,6 +874,11 @@ public final class CraftTreeOverlay {
             return inIgnoreWindow(mouseX, mouseY);
         }
         ensurePlaced();
+        if (recipeChoices != null) {
+            pressConsumed = true;
+            if (recipeChoices.click(mouseX, mouseY)) recipeChoices = null;
+            return true;
+        }
         boolean validBeforeClick = validQuantityInput;
         if (!layoutPreview && inRect(mouseX, mouseY, footer.quantity())) {
             pressConsumed = true;
@@ -917,6 +974,8 @@ public final class CraftTreeOverlay {
             scrollDragStart = target;
             return true;
         }
+        if (!planning && inRect(mouseX, mouseY, viewX, viewY, viewWidth, viewHeight)
+            && openRecipeChoices(mouseX, mouseY)) return true;
         boolean canPan = maxX > 0.5D || maxY > 0.5D;
         if (!canPan || !inRect(mouseX, mouseY, viewX, viewY, viewWidth, viewHeight)) {
             draggingPanel = true;
@@ -1065,6 +1124,10 @@ public final class CraftTreeOverlay {
      * <p>按住 Ctrl 时缩放树（放大后超出的部分用滚动查看），否则按普通滚轮滚动。</p>
      */
     public boolean mouseScrolled(double mouseX, double mouseY, double deltaY, boolean horizontal) {
+        if (recipeChoices != null && active()) {
+            recipeChoices.scroll(deltaY);
+            return true;
+        }
         if (!active() || layoutPreview) {
             return false;
         }

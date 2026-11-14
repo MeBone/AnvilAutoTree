@@ -2,6 +2,9 @@ package dev.lanhuo.anvilautotree.compat;
 
 import dev.lanhuo.anvilautotree.AnvilAutoTree;
 import dev.lanhuo.anvilautotree.client.CraftTreeOverlay;
+import dev.lanhuo.anvilautotree.client.CraftTreePickScreen;
+import mezz.jei.api.gui.handlers.IGuiProperties;
+import net.minecraft.client.gui.screens.Screen;
 import java.util.Collection;
 import mezz.jei.api.IModPlugin;
 import mezz.jei.api.JeiPlugin;
@@ -57,11 +60,24 @@ public final class AutoCraftJeiPlugin implements IModPlugin {
 
     @Override
     public void registerGuiHandlers(IGuiHandlerRegistration registration) {
+        registration.addGuiScreenHandler(CraftTreePickScreen.class, screen ->
+            CraftTreeOverlay.LIVE.extraAreas().stream().findFirst()
+                .map(area -> new PickScreenProperties(area.getX(), area.getY(), area.getWidth(), area.getHeight(),
+                    screen.width, screen.height))
+                .orElse(null));
         registration.addGlobalGuiHandler(new IGlobalGuiHandler() {
             @Override
             public Collection<Rect2i> getGuiExtraAreas() {
                 return CraftTreeOverlay.LIVE.extraAreas();
             }
         });
+    }
+
+    private record PickScreenProperties(int guiLeft, int guiTop, int guiXSize, int guiYSize,
+                                        int screenWidth, int screenHeight) implements IGuiProperties {
+        @Override
+        public Class<? extends Screen> screenClass() {
+            return CraftTreePickScreen.class;
+        }
     }
 }

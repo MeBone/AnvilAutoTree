@@ -1,17 +1,21 @@
 package dev.lanhuo.anvilautotree.craft;
 
+import dev.dubhe.anvilcraft.recipe.multiblock.Multiblock4DRecipe;
 import dev.dubhe.anvilcraft.recipe.multiblock.MultiblockConversionRecipe;
 import dev.dubhe.anvilcraft.recipe.multiblock.MultiblockRecipe;
 import dev.dubhe.anvilcraft.recipe.multiblock.MultiblockUtil;
 import dev.lanhuo.anvilautotree.AnvilAutoTree;
 import dev.lanhuo.anvilautotree.storage.StorageCraftingGrid;
 import java.util.ArrayList;
+import java.util.Comparator;
 import java.util.LinkedHashMap;
 import java.util.List;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.component.DataComponents;
+import net.minecraft.core.registries.Registries;
 import net.minecraft.network.chat.Component;
 import net.minecraft.server.level.ServerPlayer;
+import net.minecraft.tags.TagKey;
 import net.minecraft.world.entity.player.Inventory;
 import net.minecraft.world.item.BlockItem;
 import net.minecraft.world.item.ItemStack;
@@ -38,25 +42,36 @@ final class StructurePacking {
         this.toInventory = toInventory;
     }
 
+    static boolean supports(Recipe<?> recipe) {
+        return recipe instanceof MultiblockRecipe || recipe instanceof MultiblockConversionRecipe
+            || recipe instanceof Multiblock4DRecipe;
+    }
+
     static StructurePacking prepare(Recipe<?> recipe, ServerPlayer player, StorageAccess access, int quantity, boolean toInventory) {
-        var pattern = switch (recipe) {
-            case MultiblockRecipe crafting -> crafting.getPattern();
-            case MultiblockConversionRecipe conversion -> conversion.getInputPattern();
+        var patterns = switch (recipe) {
+            case MultiblockRecipe crafting -> List.of(crafting.getPattern());
+            case MultiblockConversionRecipe conversion -> List.of(conversion.getInputPattern());
+            case Multiblock4DRecipe phased -> phased.getDefinitions();
             default -> throw new IllegalArgumentException("Unsupported structure recipe");
         };
         var totals = new LinkedHashMap<StackKey, Long>();
-        for (ItemStack stack : MultiblockUtil.ingredientList(pattern, player.registryAccess())) {
-            if (!stack.isEmpty()) totals.merge(StackKey.of(stack), (long) stack.getCount(), Long::sum);
+        var tags = new LinkedHashMap<TagKey<Block>, Long>();
+        for (var pattern : patterns) {
+            for (ItemStack stack : MultiblockUtil.ingredientList(pattern, player.registryAccess())) {
+                if (!stack.isEmpty()) totals.merge(StackKey.of(stack), (long) stack.getCount(), Long::sum);
+            }
+            MultiblockUtil.tagIngredientCounts(pattern)
+                .forEach((tag, count) -> tags.merge(tag, (long) count, Long::sum));
         }
-        for (var entry : MultiblockUtil.tagIngredientCounts(pattern).entrySet()) {
-            var options = player.registryAccess().registryOrThrow(net.minecraft.core.registries.Registries.BLOCK)
-                .getTag(entry.getKey()).orElseThrow();
+        for (var entry : tags.entrySet()) {
+            var options = player.registryAccess().registryOrThrow(Registries.BLOCK)
+                .getTag(entry.getKey()).orElseThrow(UnpackableMaterial::new);
             var choice = options.stream().map(block -> new ItemStack(block.value().asItem()))
                 .filter(StructurePacking::canPack)
-                .max(java.util.Comparator.comparingLong(stack ->
+                .max(Comparator.comparingLong(stack ->
                     access.count(stack) - totals.getOrDefault(StackKey.of(stack), 0L) * quantity))
                 .orElseThrow(UnpackableMaterial::new);
-            totals.merge(StackKey.of(choice), (long) entry.getValue(), Long::sum);
+            totals.merge(StackKey.of(choice), entry.getValue(), Long::sum);
         }
         var materials = new ArrayList<IngredientChoice>();
         var stacks = new ArrayList<ItemStack>();
