@@ -41,6 +41,7 @@ public final class AutoCraftClient {
     private static Optional<UUID> plannedStorage = Optional.empty();
     private static boolean planFailed;
     private static boolean confirmed;
+    private static boolean toGrid;
     private static int quantity = 1;
     private static int requestSequence;
     private static int requestId;
@@ -115,7 +116,7 @@ public final class AutoCraftClient {
     private static void sendRequest(Optional<UUID> storageId) {
         PacketDistributor.sendToServer(new CraftRequestPayload(
             pending.source(), pending.recipe().id(), pending.recipe().value() instanceof StonecutterRecipe,
-            storageId, quantity, requestId
+            storageId, quantity, requestId, toGrid
         ));
     }
 
@@ -131,7 +132,8 @@ public final class AutoCraftClient {
             handlePlan(payload);
         } else if (payload.phase() == CraftResponsePayload.PHASE_ACCEPTED && confirmed) {
             waitTicks = -1;
-        } else if (payload.phase() == CraftResponsePayload.PHASE_DONE && confirmed) {
+        } else if ((payload.phase() == CraftResponsePayload.PHASE_DONE
+            || payload.phase() == CraftResponsePayload.PHASE_GRID_FILLED) && confirmed) {
             handleDone(payload);
         }
     }
@@ -251,11 +253,12 @@ public final class AutoCraftClient {
             cancel();
             return;
         }
-        if (payload.success() && pending.transfer() == null && minecraft.screen instanceof
+        boolean gridFilled = payload.phase() == CraftResponsePayload.PHASE_GRID_FILLED;
+        if (payload.success() && (gridFilled || toGrid || pending.transfer() == null) && minecraft.screen instanceof
             dev.dubhe.anvilcraft.client.gui.screen.StorageScreen screen && screen.getMenu() == pending.container()) {
-            screen.showCraftingAfterTransfer(false);
+            screen.showCraftingAfterTransfer(gridFilled && pending.recipe().value() instanceof StonecutterRecipe);
         }
-        if (!payload.success() || quantity > 1 || pending.transfer() == null) {
+        if (!payload.success() || gridFilled || quantity > 1 || pending.transfer() == null) {
             clear();
             return;
         }
@@ -265,12 +268,13 @@ public final class AutoCraftClient {
         replayAttempts = 0;
     }
 
-    private static void confirm() {
+    private static void confirm(boolean sendToGrid) {
         Minecraft minecraft = Minecraft.getInstance();
         if (pending == null || confirmed || minecraft.player == null || plannedStorage.isEmpty()) {
             return;
         }
         confirmed = true;
+        toGrid = sendToGrid;
         sendRequest(plannedStorage);
         waitTicks = JOB_TIMEOUT;
         minecraft.player.displayClientMessage(Component.translatable("anvilautotree.status.crafting"), true);
@@ -290,6 +294,7 @@ public final class AutoCraftClient {
         plannedStorage = Optional.empty();
         planFailed = false;
         confirmed = false;
+        toGrid = false;
         quantity = 1;
         previewDelay = 0;
         replayDelay = -1;

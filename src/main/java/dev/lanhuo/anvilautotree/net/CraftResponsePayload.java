@@ -28,6 +28,7 @@ public record CraftResponsePayload(
     public static final int PHASE_PLAN = 0;
     public static final int PHASE_DONE = 1;
     public static final int PHASE_ACCEPTED = 2;
+    public static final int PHASE_GRID_FILLED = 3;
     public static final Type<CraftResponsePayload> TYPE = new Type<>(
         ResourceLocation.fromNamespaceAndPath(AnvilAutoTree.MOD_ID, "craft_response")
     );
@@ -58,7 +59,11 @@ public record CraftResponsePayload(
     }
 
     public static CraftResponsePayload done(boolean success, Component message, int requestId) {
-        return new CraftResponsePayload(success, PHASE_DONE, message, List.of(), new Storage(StorageKind.HYPERDIMENSION, Optional.empty()), requestId);
+        return finished(success, message, requestId, false);
+    }
+
+    public static CraftResponsePayload finished(boolean success, Component message, int requestId, boolean gridFilled) {
+        return new CraftResponsePayload(success, gridFilled ? PHASE_GRID_FILLED : PHASE_DONE, message, List.of(), new Storage(StorageKind.HYPERDIMENSION, Optional.empty()), requestId);
     }
 
     public static CraftResponsePayload accepted(int requestId) {

@@ -40,7 +40,7 @@ final class CraftTreeLayoutScreen extends Screen {
                 new CraftNodePayload(0, Items.IRON_INGOT.getDefaultInstance(), 16, 16, 0, false),
                 new CraftNodePayload(0, Items.REDSTONE.getDefaultInstance(), 16, 16, 0, false),
                 new CraftNodePayload(1, Items.OAK_LOG.getDefaultInstance(), 12, 16, 0, false)
-            ), null, false, StorageKind.HYPERDIMENSION, 16, ignored -> {}, () -> {}, () -> {});
+            ), null, false, StorageKind.HYPERDIMENSION, 16, ignored -> {}, ignored -> {}, () -> {});
         }
         int buttonWidth = Math.min(96, (width - 24) / 3);
         reset = addRenderableWidget(Button.builder(Component.translatable("anvilautotree.layout.reset"),

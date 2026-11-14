@@ -8,7 +8,7 @@ import net.neoforged.fml.ModContainer;
 import net.neoforged.fml.common.Mod;
 import net.neoforged.fml.config.ModConfig;
 import net.neoforged.neoforge.common.NeoForge;
-import net.neoforged.neoforge.event.server.ServerStoppedEvent;
+import net.neoforged.neoforge.event.server.ServerStoppingEvent;
 import net.neoforged.neoforge.event.tick.ServerTickEvent;
 import org.slf4j.Logger;
 
@@ -27,14 +27,14 @@ public final class AnvilAutoTree {
         container.registerConfig(ModConfig.Type.COMMON, AutoCraftConfig.SPEC);
         modBus.addListener(ModPayloads::register);
         NeoForge.EVENT_BUS.addListener(AnvilAutoTree::onServerTick);
-        NeoForge.EVENT_BUS.addListener(AnvilAutoTree::onServerStopped);
+        NeoForge.EVENT_BUS.addListener(AnvilAutoTree::onServerStopping);
     }
 
     private static void onServerTick(ServerTickEvent.Post event) {
         CraftJobManager.tick(event.getServer());
     }
 
-    private static void onServerStopped(ServerStoppedEvent event) {
+    private static void onServerStopping(ServerStoppingEvent event) {
         CraftJobManager.clear();
     }
 }

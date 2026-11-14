@@ -50,7 +50,7 @@ public final class CraftPlanner {
         this.storage = storage;
     }
 
-    public static CraftPlan plan(ServerLevel level, StorageAccess storage, RecipeHolder<?> target, boolean stonecutter, int quantity, boolean produceTarget) {
+    public static CraftPlan plan(ServerLevel level, StorageAccess storage, RecipeHolder<?> target, boolean stonecutter, int requestedItems, boolean produceTarget) {
         CraftPlanner planner = new CraftPlanner(level, storage);
         ItemStack output = target.value().getResultItem(level.registryAccess());
         List<Component> preview = new ArrayList<>();
@@ -66,16 +66,18 @@ public final class CraftPlanner {
                     List.of(Component.translatable("anvilautotree.error.unsupported_batch")), false, null);
             }
         }
-        return planner.planMaterials(target, stonecutter, quantity, output, root, preview, produceTarget);
+        int runs = produceTarget ? Math.ceilDiv(requestedItems, output.getCount()) : 1;
+        return planner.planMaterials(target, stonecutter, runs, output, root, preview, produceTarget,
+            produceTarget ? List.of() : gridInputs(target.value(), root, stonecutter));
     }
 
     static CraftPlan planStructure(ServerLevel level, StorageAccess storage, RecipeHolder<?> recipe, ItemStack icon, int quantity,
                                    List<IngredientChoice> materials) {
-        return new CraftPlanner(level, storage).planMaterials(recipe, false, quantity, icon, materials, List.of(), false);
+        return new CraftPlanner(level, storage).planMaterials(recipe, false, quantity, icon, materials, List.of(), false, List.of());
     }
 
     private CraftPlan planMaterials(RecipeHolder<?> target, boolean stonecutter, int quantity, ItemStack output,
-                                    List<IngredientChoice> root, List<Component> initialPreview, boolean produceTarget) {
+                                    List<IngredientChoice> root, List<Component> initialPreview, boolean produceTarget, List<ItemStack> gridInputs) {
         var preview = new ArrayList<>(initialPreview);
         List<Component> errors = new ArrayList<>();
         List<CraftTreeNode> rootChildren = new ArrayList<>();
@@ -123,7 +125,21 @@ public final class CraftPlanner {
             !errors.isEmpty(),
             rootChildren
         );
-        return new CraftPlan(this.steps, preview, errors, true, tree);
+        return new CraftPlan(this.steps, preview, errors, true, tree, gridInputs);
+    }
+
+    private static List<ItemStack> gridInputs(Recipe<?> recipe, List<IngredientChoice> choices, boolean stonecutter) {
+        if (stonecutter) return List.of(choices.getFirst().key().proto());
+        int width = recipe instanceof ShapedRecipe shaped ? shaped.getWidth() : 3;
+        var ingredients = recipe.getIngredients();
+        var chosen = choices.iterator();
+        var slots = new ArrayList<>(java.util.Collections.nCopies(9, ItemStack.EMPTY));
+        for (int slot = 0; slot < ingredients.size(); slot++) {
+            if (!ingredients.get(slot).isEmpty()) {
+                slots.set(slot / width * 3 + slot % width, chosen.next().key().proto());
+            }
+        }
+        return slots;
     }
 
     private ItemStack batchOutput(Recipe<?> recipe, List<IngredientChoice> choices) {

@@ -7,6 +7,7 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.function.Consumer;
 import java.util.function.IntConsumer;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.Font;
@@ -96,7 +97,7 @@ public final class CraftTreeOverlay {
 
     private boolean visible;
     private List<CraftNodePayload> nodes = List.of();
-    private Runnable onConfirm = () -> {
+    private Consumer<Boolean> onConfirm = ignored -> {
     };
     private Runnable onCancel = () -> {
     };
@@ -180,7 +181,7 @@ public final class CraftTreeOverlay {
      */
     public void show(
         List<CraftNodePayload> payloads, Component status, boolean canConfirm, StorageKind kind, int quantity,
-        IntConsumer changeQuantity, Runnable confirm, Runnable cancel
+        IntConsumer changeQuantity, Consumer<Boolean> confirm, Runnable cancel
     ) {
         structurePacking = false;
         pickBlock = false;
@@ -213,7 +214,7 @@ public final class CraftTreeOverlay {
     private void initQuantityInput(int initialValue) {
         footer = null;
         quantityInput = new EditBox(Minecraft.getInstance().font, 0, 0, QUANTITY_WIDTH, BUTTON_HEIGHT,
-            Component.translatable("anvilautotree.gui.quantity_hint", storageKind.maxOrderQuantity()));
+            Component.translatable("anvilautotree.gui.quantity_label"));
         quantityInput.setMaxLength(4);
         quantityInput.setFilter(value -> value.chars().allMatch(character -> character >= '0' && character <= '9'));
         quantityInput.setValue(Integer.toString(initialValue));
@@ -275,7 +276,7 @@ public final class CraftTreeOverlay {
         if (!active() || layoutPreview) {
             return false;
         }
-        tryConfirm();
+        tryConfirm(false);
         return true;
     }
 
@@ -293,7 +294,7 @@ public final class CraftTreeOverlay {
             case GLFW.GLFW_KEY_SPACE -> {
                 if (validQuantityInput) {
                     finishQuantityEdit();
-                    tryConfirm();
+                    tryConfirm(false);
                 }
             }
             default -> quantityInput.keyPressed(key, scanCode, modifiers);
@@ -710,7 +711,7 @@ public final class CraftTreeOverlay {
     }
 
     private void renderFooter(GuiGraphics graphics, Font font, int mouseX, int mouseY) {
-        renderButton(graphics, font, structurePacking ? "anvilautotree.gui.structure_pack" : quantity > 1 ? "anvilautotree.gui.confirm_batch" : "anvilautotree.gui.confirm",
+        renderButton(graphics, font, structurePacking ? "anvilautotree.gui.structure_pack" : "anvilautotree.gui.confirm",
             footer.confirm(), mouseX, mouseY, !layoutPreview && confirmEnabled && validQuantityInput && !busy, false,
             0);
         quantityInput.render(graphics, mouseX, mouseY, 0);
@@ -719,10 +720,27 @@ public final class CraftTreeOverlay {
         renderButton(graphics, font, "anvilautotree.gui.cancel", footer.cancel(), mouseX, mouseY, !layoutPreview, false,
             2);
         if (!layoutPreview && inRect(mouseX, mouseY, footer.quantity())) {
-            graphics.renderTooltip(font, storageKind.supportsBatch()
-                ? Component.translatable("anvilautotree.gui.quantity_hint", storageKind.maxOrderQuantity())
-                : Component.translatable("anvilautotree.error.crate_single_only"), mouseX, mouseY);
+            if (!storageKind.supportsBatch()) {
+                graphics.renderTooltip(font, Component.translatable("anvilautotree.error.crate_single_only"), mouseX, mouseY);
+            } else {
+                String hint = structurePacking ? "anvilautotree.gui.structure_quantity_hint" : "anvilautotree.gui.quantity_hint";
+                List<Component> lines = new ArrayList<>();
+                lines.add(Component.translatable(hint, storageKind.maxOrderQuantity()));
+                if (!structurePacking && (pickBlock || quantity > 1) && root >= 0 && !planning && confirmEnabled) {
+                    long output = nodes.get(root).required();
+                    if (output > quantity) {
+                        lines.add(Component.translatable("anvilautotree.gui.quantity_rounded", output));
+                    }
+                }
+                graphics.renderTooltip(font, lines, Optional.empty(), mouseX, mouseY);
+            }
         } else if (!layoutPreview && inRect(mouseX, mouseY, footer.confirm())) {
+            if (canSendToGrid()) {
+                graphics.renderTooltip(font, List.of(
+                    Component.translatable("anvilautotree.gui.batch_hint"),
+                    Component.translatable("anvilautotree.gui.batch_grid_hint")), Optional.empty(), mouseX, mouseY);
+                return;
+            }
             graphics.renderTooltip(font, Component.translatable(
                 structurePacking
                     ? (pickBlock ? "anvilautotree.gui.structure_inventory_hint" : "anvilautotree.gui.structure_pack_hint")
@@ -860,7 +878,7 @@ public final class CraftTreeOverlay {
         }
         if (mouseY >= panelY + panelHeight - FOOTER) {
             if (inRect(mouseX, mouseY, footer.confirm()) && validBeforeClick) {
-                tryConfirm();
+                tryConfirm(Screen.hasShiftDown() && canSendToGrid());
             } else if (inRect(mouseX, mouseY, footer.filter())) {
                 toggleOnlyMissing();
             } else if (inRect(mouseX, mouseY, footer.cancel())) {
@@ -1099,15 +1117,19 @@ public final class CraftTreeOverlay {
         return scaled <= viewport ? (viewport - scaled) / 2 : -Math.round((float) scroll * scale);
     }
 
-    private void tryConfirm() {
+    private boolean canSendToGrid() {
+        return storageKind == StorageKind.HYPERDIMENSION && quantity > 1 && !structurePacking && !pickBlock;
+    }
+
+    private void tryConfirm(boolean toGrid) {
         if (!confirmEnabled || !validQuantityInput || busy) {
             return;
         }
         busy = true;
-        Runnable callback = onConfirm;
+        Consumer<Boolean> callback = onConfirm;
         hide();
         ignoreInputBefore = System.currentTimeMillis() + IGNORE_INPUT_MS;
-        callback.run();
+        callback.accept(toGrid);
     }
 
     private void cancel() {

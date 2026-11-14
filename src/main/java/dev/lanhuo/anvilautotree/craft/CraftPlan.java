@@ -2,6 +2,7 @@ package dev.lanhuo.anvilautotree.craft;
 
 import java.util.List;
 import net.minecraft.network.chat.Component;
+import net.minecraft.world.item.ItemStack;
 
 /**
  * 一次自动合成的规划结果。
@@ -15,6 +16,7 @@ public final class CraftPlan {
     private final List<Component> errors;
     private final boolean supported;
     private final CraftTreeNode tree;
+    private final List<ItemStack> gridInputs;
 
     public CraftPlan(
         List<CraftStep> steps,
@@ -23,11 +25,17 @@ public final class CraftPlan {
         boolean supported,
         CraftTreeNode tree
     ) {
+        this(steps, preview, errors, supported, tree, List.of());
+    }
+
+    CraftPlan(List<CraftStep> steps, List<Component> preview, List<Component> errors, boolean supported,
+              CraftTreeNode tree, List<ItemStack> gridInputs) {
         this.steps = List.copyOf(steps);
         this.preview = List.copyOf(preview);
         this.errors = List.copyOf(errors);
         this.supported = supported;
         this.tree = tree;
+        this.gridInputs = List.copyOf(gridInputs);
     }
 
     public static CraftPlan unsupported(List<Component> preview) {
@@ -38,6 +46,10 @@ public final class CraftPlan {
             false,
             null
         );
+    }
+
+    List<ItemStack> gridInputs() {
+        return this.gridInputs;
     }
 
     public boolean isSuccess() {

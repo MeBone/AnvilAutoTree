@@ -18,12 +18,13 @@ import net.minecraft.resources.ResourceLocation;
  * @param source 存储界面的位置，或中键取物所用的超维终端绑定
  * @param recipeId 目标配方
  * @param stonecutter 是否为切石机配方
- * @param quantity 目标配方执行次数
+ * @param quantity 目标成品数量，多方块配方为结构套数
  * @param requestId 客户端用于匹配预览或作业回执的编号
+ * @param toGrid 确认超维批量订单后把成品放入合成栏
  * @param storageId 规划时为空，确认执行时为玩家预览的存储
  */
 public record CraftRequestPayload(
-    Either<BlockPos, UUID> source, ResourceLocation recipeId, boolean stonecutter, Optional<UUID> storageId, int quantity, int requestId
+    Either<BlockPos, UUID> source, ResourceLocation recipeId, boolean stonecutter, Optional<UUID> storageId, int quantity, int requestId, boolean toGrid
 )
     implements CustomPacketPayload {
     public static final Type<CraftRequestPayload> TYPE = new Type<>(
@@ -34,15 +35,16 @@ public record CraftRequestPayload(
         CraftRequestPayload::source,
         ResourceLocation.STREAM_CODEC,
         CraftRequestPayload::recipeId,
-        ByteBufCodecs.BOOL,
-        CraftRequestPayload::stonecutter,
+        ByteBufCodecs.VAR_INT,
+        request -> (request.stonecutter() ? 1 : 0) | (request.toGrid() ? 2 : 0),
         ByteBufCodecs.optional(UUIDUtil.STREAM_CODEC),
         CraftRequestPayload::storageId,
         ByteBufCodecs.VAR_INT,
         CraftRequestPayload::quantity,
         ByteBufCodecs.VAR_INT,
         CraftRequestPayload::requestId,
-        CraftRequestPayload::new
+        (source, recipeId, flags, storageId, quantity, requestId) -> new CraftRequestPayload(
+            source, recipeId, (flags & 1) != 0, storageId, quantity, requestId, (flags & 2) != 0)
     );
 
     public boolean pickBlock() {

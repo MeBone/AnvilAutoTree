@@ -4,6 +4,7 @@ import dev.lanhuo.anvilautotree.net.CraftResponsePayload;
 import dev.lanhuo.anvilautotree.net.StorageKind;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.function.BiPredicate;
 import java.util.function.Supplier;
 import net.minecraft.network.protocol.game.ClientboundContainerSetSlotPacket;
 import net.minecraft.network.protocol.game.ClientboundSetCarriedItemPacket;
@@ -28,12 +29,16 @@ public final class CraftJob {
     private final int quantity;
     private final boolean pickBlock;
     private final Supplier<Component> packing;
+    private final boolean fillIngredients;
+    private final BiPredicate<ItemStack, Integer> gridDelivery;
+    private int pendingOutput;
     private boolean deliveredToHand;
     private int stepIndex;
     private int craftsInStep;
     private boolean failed;
 
-    public CraftJob(ServerPlayer player, StorageAccess storage, List<CraftStep> steps, StorageKind kind, int requestId, int quantity, boolean pickBlock, Supplier<Component> packing) {
+    public CraftJob(ServerPlayer player, StorageAccess storage, List<CraftStep> steps, StorageKind kind, int requestId, int quantity, boolean pickBlock, Supplier<Component> packing,
+                    BiPredicate<ItemStack, Integer> gridDelivery, boolean fillIngredients) {
         this.player = player;
         this.storage = storage;
         this.steps = List.copyOf(steps);
@@ -42,6 +47,8 @@ public final class CraftJob {
         this.quantity = quantity;
         this.pickBlock = pickBlock;
         this.packing = packing;
+        this.gridDelivery = gridDelivery;
+        this.fillIngredients = fillIngredients;
     }
 
     /**
@@ -98,13 +105,35 @@ public final class CraftJob {
         if (!this.failed && packing != null) {
             Component error = packing.get();
             this.failed = error != null;
-            message = this.failed ? error : Component.translatable(this.pickBlock
-                ? "anvilautotree.status.structure_inventory_packed" : "anvilautotree.status.structure_packed");
+            if (this.failed) {
+                message = error;
+            } else if (!this.fillIngredients) {
+                message = Component.translatable(this.pickBlock
+                    ? "anvilautotree.status.structure_inventory_packed" : "anvilautotree.status.structure_packed");
+            }
         } else if (!this.failed && this.pickBlock) {
             message = Component.translatable(this.deliveredToHand
                 ? "anvilautotree.status.pick_done" : "anvilautotree.status.pick_stored");
         }
-        PacketDistributor.sendToPlayer(this.player, CraftResponsePayload.done(!this.failed, message, this.requestId));
+        if (this.pendingOutput > 0) {
+            ItemStack output = this.steps.getLast().output();
+            if (!this.failed && this.gridDelivery.test(output, this.pendingOutput)) {
+                message = Component.translatable("anvilautotree.status.batch_grid_done");
+            } else {
+                storePendingOutput();
+                if (!this.failed) {
+                    message = Component.translatable("anvilautotree.status.batch_grid_fallback");
+                }
+            }
+        }
+        PacketDistributor.sendToPlayer(this.player, CraftResponsePayload.finished(!this.failed, message, this.requestId, this.fillIngredients && !this.failed));
+    }
+
+    void storePendingOutput() {
+        if (this.pendingOutput > 0) {
+            this.deliverOutput(this.steps.getLast().output(), this.pendingOutput, false);
+            this.pendingOutput = 0;
+        }
     }
 
     private boolean execute(CraftStep step, int crafts) {
@@ -135,12 +164,21 @@ public final class CraftJob {
      * 产物入存储：按堆叠上限分块插入，避免一次性构造出超过堆叠上限的 {@link ItemStack}。
      */
     private void insertOutput(CraftStep step, int crafts) {
-        int remaining = step.output().getCount() * crafts;
-        int chunkSize = Math.max(1, step.output().getMaxStackSize());
+        int count = step.output().getCount() * crafts;
+        boolean finalStep = this.stepIndex == this.steps.size() - 1;
+        if (this.gridDelivery != null && finalStep) {
+            this.pendingOutput += count;
+            return;
+        }
+        this.deliverOutput(step.output(), count, this.pickBlock && this.packing == null && finalStep);
+    }
+
+    private void deliverOutput(ItemStack stack, int remaining, boolean toHand) {
+        int chunkSize = Math.max(1, stack.getMaxStackSize());
         while (remaining > 0) {
             int count = Math.min(remaining, chunkSize);
-            ItemStack output = step.output().copyWithCount(count);
-            if (this.pickBlock && this.packing == null && this.stepIndex == this.steps.size() - 1) {
+            ItemStack output = stack.copyWithCount(count);
+            if (toHand) {
                 this.deliverToHand(output);
             }
             ItemStack leftover = output.isEmpty() ? ItemStack.EMPTY : this.storage.insert(output);

@@ -9,6 +9,9 @@ import dev.lanhuo.anvilautotree.net.CraftNodePayload;
 import dev.lanhuo.anvilautotree.net.CraftRequestPayload;
 import dev.lanhuo.anvilautotree.net.CraftResponsePayload;
 import dev.lanhuo.anvilautotree.storage.StorageLookup;
+import dev.lanhuo.anvilautotree.storage.StorageCraftingGrid;
+import dev.lanhuo.anvilautotree.AnvilAutoTree;
+import dev.lanhuo.anvilautotree.AutoCraftConfig;
 import java.util.List;
 import java.util.Optional;
 import net.minecraft.network.chat.Component;
@@ -42,10 +45,6 @@ public final class CraftService {
             fail(player, payload, "anvilautotree.error.crate_single_only", kind);
             return;
         }
-        if (payload.quantity() < 1 || payload.quantity() > kind.maxOrderQuantity()) {
-            fail(player, payload, Component.translatable("anvilautotree.error.invalid_quantity", kind.maxOrderQuantity()), kind);
-            return;
-        }
         if (payload.execute() && !payload.storageId().orElseThrow().equals(storage.getId())) {
             fail(player, payload, "anvilautotree.error.storage_changed", kind);
             return;
@@ -60,16 +59,28 @@ public final class CraftService {
             return;
         }
         RecipeHolder<?> recipe = found.get();
+        boolean structureRecipe = recipe.value() instanceof IMultiblockRecipe;
+        if (payload.quantity() < 1 || payload.quantity() > kind.maxOrderQuantity()) {
+            String key = structureRecipe ? "anvilautotree.error.invalid_structure_quantity" : "anvilautotree.error.invalid_quantity";
+            fail(player, payload, Component.translatable(key, kind.maxOrderQuantity()), kind);
+            return;
+        }
+        if (payload.toGrid() && (kind != StorageKind.HYPERDIMENSION || payload.pickBlock()
+            || structureRecipe || payload.quantity() <= 1)) {
+            fail(player, payload, "anvilautotree.error.batch_grid_unsupported", kind);
+            return;
+        }
         StorageAccess stock = new ItemHandlerStorageAccess(storage.getItems());
         var result = recipe.value().getResultItem(level.registryAccess());
         if (payload.pickBlock() && !result.isEmpty() && stock.count(result) > 0) {
             fail(player, payload, "anvilautotree.error.pick_stock", kind);
             return;
         }
-        StorageAccess access = new InventoryAwareStorageAccess(stock, player);
+        boolean useInventory = AutoCraftConfig.USE_PLAYER_INVENTORY.get();
+        StorageAccess access = useInventory ? new InventoryAwareStorageAccess(stock, player) : stock;
         StructurePacking packing = null;
         CraftPlan plan;
-        if (recipe.value() instanceof IMultiblockRecipe) {
+        if (structureRecipe) {
             if (kind == StorageKind.LARGE_CRATE) {
                 fail(player, payload, "anvilautotree.error.structure_storage", kind);
                 return;
@@ -122,7 +133,8 @@ public final class CraftService {
             );
             return;
         }
-        if (plan.steps().isEmpty() && packing == null) {
+        boolean fillIngredients = !useInventory && !plan.gridInputs().isEmpty();
+        if (plan.steps().isEmpty() && packing == null && !fillIngredients) {
             PacketDistributor.sendToPlayer(
                 player,
                 CraftResponsePayload.done(
@@ -133,15 +145,53 @@ public final class CraftService {
             );
             return;
         }
+        if (payload.toGrid()) {
+            CraftStep output = plan.steps().getLast();
+            if (!placeInGrid(player, payload, output.output(), output.totalOutput().getCount(), true)) {
+                fail(player, payload, "anvilautotree.error.batch_grid_space", kind);
+                return;
+            }
+        }
         StructurePacking structure = packing;
         CraftJobManager.submit(new CraftJob(player, access, plan.steps(), kind, payload.requestId(), payload.quantity(), payload.pickBlock(),
-            structure == null ? null : () -> {
+            structure == null && !fillIngredients ? null : () -> {
                 if (StorageLookup.resolve(player, payload.source()).filter(current -> current == storage).isEmpty()) {
                     return Component.translatable("anvilautotree.error.storage_changed");
                 }
-                return structure.finish(player, sourcePos, access);
-            }));
+                return fillIngredients
+                    ? fillGridIngredients(player, sourcePos, plan, recipe, access, payload.stonecutter())
+                    : structure.finish(player, sourcePos, access);
+            }, payload.toGrid() ? (output, count) -> placeInGrid(player, payload, output, count, false) : null, fillIngredients));
         PacketDistributor.sendToPlayer(player, CraftResponsePayload.accepted(payload.requestId()));
+    }
+
+    private static Component fillGridIngredients(ServerPlayer player, net.minecraft.core.BlockPos pos,
+                                                 CraftPlan plan, RecipeHolder<?> recipe, StorageAccess access, boolean stonecutter) {
+        var grid = StorageCraftingGrid.resolve(player, pos);
+        if (grid.isEmpty()) return Component.translatable("anvilautotree.error.ingredients_grid");
+        try {
+            return grid.get().fillIngredients(player, recipe, plan.gridInputs(), access, stonecutter)
+                ? null : Component.translatable("anvilautotree.error.ingredients_grid");
+        } catch (ReflectiveOperationException | RuntimeException exception) {
+            AnvilAutoTree.LOGGER.warn("Unable to fill AnvilCraft's grid from storage", exception);
+            return Component.translatable("anvilautotree.error.ingredients_grid");
+        }
+    }
+
+    private static boolean placeInGrid(ServerPlayer player, CraftRequestPayload payload, net.minecraft.world.item.ItemStack output,
+                                       int count, boolean simulate) {
+        var pos = payload.source().left().orElseThrow();
+        if (StorageLookup.resolve(player, pos).filter(storage -> payload.storageId().orElseThrow().equals(storage.getId())).isEmpty()) {
+            return false;
+        }
+        var grid = StorageCraftingGrid.resolve(player, pos);
+        if (grid.isEmpty()) return false;
+        try {
+            return grid.get().insertOutput(output, count, simulate);
+        } catch (ReflectiveOperationException | RuntimeException exception) {
+            AnvilAutoTree.LOGGER.warn("Unable to send crafting output to AnvilCraft's grid", exception);
+            return false;
+        }
     }
 
     /**

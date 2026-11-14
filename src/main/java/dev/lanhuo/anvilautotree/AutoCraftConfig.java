@@ -10,12 +10,16 @@ import net.neoforged.neoforge.common.ModConfigSpec;
  */
 public final class AutoCraftConfig {
     public static final ModConfigSpec SPEC;
+    public static final ModConfigSpec.BooleanValue USE_PLAYER_INVENTORY;
     public static final ModConfigSpec.IntValue PARALLEL;
     public static final ModConfigSpec.IntValue MAX_DEPTH;
     public static final ModConfigSpec.IntValue MAX_STEPS;
 
     static {
         ModConfigSpec.Builder builder = new ModConfigSpec.Builder();
+        USE_PLAYER_INVENTORY = builder
+            .comment("Allow the crafting tree to count and consume materials from the player's inventory.")
+            .define("usePlayerInventory", false);
         PARALLEL = builder
             .comment("超维存储每个服务端 tick 最多执行的合成次数。潜影集装箱使用该值的 1/12（向下取整，最少 1）。")
             .defineInRange("parallel", 1024, 1, 1_000_000);

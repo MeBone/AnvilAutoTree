@@ -46,6 +46,7 @@ public final class CraftJobManager {
     }
 
     public static void clear() {
+        JOBS.forEach(CraftJob::storePendingOutput);
         JOBS.clear();
     }
 
@@ -62,6 +63,7 @@ public final class CraftJobManager {
             CraftJob job = iterator.next();
             if (job.player().isRemoved()) {
                 // 玩家已离线：直接回收，避免对失效实体继续扣料/发包
+                job.storePendingOutput();
                 iterator.remove();
                 continue;
             }
