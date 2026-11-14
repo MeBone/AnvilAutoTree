@@ -1,6 +1,7 @@
 package dev.lanhuo.anvilautotree.client;
 
-import dev.dubhe.anvilcraft.client.rpc.StorageTerminalClientStub;
+import dev.lanhuo.anvilautotree.craft.RecipeData;
+import dev.dubhe.anvilcraft.recipe.sync.RecipesRecord;
 import dev.dubhe.anvilcraft.client.rpc.TerminalJeiStorageCache;
 import dev.dubhe.anvilcraft.init.item.ModComponents;
 import dev.dubhe.anvilcraft.item.HyperdimensionTerminalItem;
@@ -16,7 +17,6 @@ import java.util.UUID;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.multiplayer.ClientLevel;
 import net.minecraft.client.player.LocalPlayer;
-import net.minecraft.world.entity.player.Inventory;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.crafting.Recipe;
 import net.minecraft.world.item.crafting.RecipeHolder;
@@ -53,11 +53,13 @@ final class TerminalPickBlock {
             return false;
         }
         var state = level.getBlockState(hit.getBlockPos());
-        ItemStack target = state.getCloneItemStack(hit, level, hit.getBlockPos(), player);
+        ItemStack target = state.getCloneItemStack(level, hit.getBlockPos(), false);
         if (target.isEmpty() || player.getInventory().findSlotMatchingItem(target) != -1) {
             return false;
         }
-        RecipeHolder<?> recipe = level.getRecipeManager().getRecipes().stream()
+        var recipes = RecipesRecord.getRecipes(level);
+        if (recipes == null) return false;
+        RecipeHolder<?> recipe = recipes.values().stream()
             .filter(holder -> produces(level, holder.value(), target))
             .min(Comparator.<RecipeHolder<?>>comparingInt(holder -> priority(holder.value()))
                 .thenComparing(RecipeHolder::id))
@@ -69,21 +71,16 @@ final class TerminalPickBlock {
         awaitingStock = player;
         // Preserve AnvilCraft's withdrawal and hotbar selection before offering a craft.
         List<UUID> storages = TerminalJeiStorageCache.boundStorages(player);
-        StorageTerminalClientStub.withdrawToInventory(storages, List.of(target.copyWithCount(target.getMaxStackSize())))
-            .whenComplete((withdrawn, error) -> minecraft.execute(() -> {
+        TerminalJeiStorageCache.ensureComplete(storages)
+            .whenComplete((snapshot, error) -> minecraft.execute(() -> {
                 if (awaitingStock != player) return;
                 awaitingStock = null;
-                if (error != null || minecraft.player != player || minecraft.level != level || minecraft.screen != null) {
+                if (minecraft.player != player || minecraft.level != level || minecraft.screen != null || minecraft.gameMode == null) {
                     return;
                 }
-                int slot = player.getInventory().findSlotMatchingItem(target);
-                if (slot < 0 && !withdrawn.isEmpty()) {
-                    return;
-                }
-                if (Inventory.isHotbarSlot(slot)) {
-                    player.getInventory().selected = slot;
-                } else if (slot >= 0 && minecraft.gameMode != null) {
-                    minecraft.gameMode.handlePickItem(slot);
+                if (error != null || snapshot == null || !snapshot.complete() || snapshot.items().stream().anyMatch(stack -> ItemStack.isSameItemSameComponents(stack, target))
+                    || player.getInventory().findSlotMatchingItem(target) >= 0) {
+                    minecraft.gameMode.handlePickItemFromBlock(hit.getBlockPos(), false);
                 } else if (AutoCraftClient.canStartPickBlock()) {
                     AutoCraftClient.planPickBlock(storageId, recipe, player);
                 }
@@ -103,11 +100,11 @@ final class TerminalPickBlock {
     private static boolean produces(ClientLevel level, Recipe<?> recipe, ItemStack target) {
         var registries = level.registryAccess();
         return switch (recipe) {
-            case ShapedRecipe ignored -> ItemStack.isSameItemSameComponents(recipe.getResultItem(registries), target);
-            case ShapelessRecipe ignored -> ItemStack.isSameItemSameComponents(recipe.getResultItem(registries), target);
-            case StonecutterRecipe ignored -> ItemStack.isSameItemSameComponents(recipe.getResultItem(registries), target);
-            case MultiblockRecipe ignored -> ItemStack.isSameItemSameComponents(recipe.getResultItem(registries), target);
-            case Multiblock4DRecipe ignored -> ItemStack.isSameItemSameComponents(recipe.getResultItem(registries), target);
+            case ShapedRecipe ignored -> ItemStack.isSameItemSameComponents(RecipeData.result(recipe, level), target);
+            case ShapelessRecipe ignored -> ItemStack.isSameItemSameComponents(RecipeData.result(recipe, level), target);
+            case StonecutterRecipe ignored -> ItemStack.isSameItemSameComponents(RecipeData.result(recipe, level), target);
+            case MultiblockRecipe ignored -> ItemStack.isSameItemSameComponents(RecipeData.result(recipe, level), target);
+            case Multiblock4DRecipe ignored -> ItemStack.isSameItemSameComponents(RecipeData.result(recipe, level), target);
             case MultiblockConversionRecipe conversion -> MultiblockUtil.ingredientList(conversion.getOutputPattern(), registries)
                 .stream().anyMatch(stack -> ItemStack.isSameItemSameComponents(stack, target));
             default -> false;

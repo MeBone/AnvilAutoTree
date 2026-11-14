@@ -1,16 +1,18 @@
 package dev.lanhuo.anvilautotree.client;
 
+import dev.lanhuo.anvilautotree.craft.RecipeData;
+import dev.dubhe.anvilcraft.recipe.sync.RecipesRecord;
 import dev.lanhuo.anvilautotree.craft.RecipePreference;
 import dev.lanhuo.anvilautotree.net.CraftNodePayload;
 import java.util.ArrayList;
-import java.util.Arrays;
+import java.util.Optional;
 import java.util.LinkedHashMap;
 import java.util.List;
 import net.minecraft.client.Minecraft;
-import net.minecraft.client.gui.GuiGraphics;
+import net.minecraft.client.gui.GuiGraphicsExtractor;
 import net.minecraft.client.renderer.Rect2i;
 import net.minecraft.network.chat.Component;
-import net.minecraft.resources.ResourceLocation;
+import net.minecraft.resources.Identifier;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.crafting.RecipeHolder;
 import net.neoforged.fml.ModList;
@@ -33,19 +35,20 @@ final class RecipeChoicesWindow {
     static RecipeChoicesWindow open(CraftNodePayload parent, CraftNodePayload child) {
         var level = Minecraft.getInstance().level;
         if (level == null) return null;
-        var manager = level.getRecipeManager();
+        var manager = RecipesRecord.getRecipes(level);
+        if (manager == null) return null;
         var preferences = AutoCraftClientConfig.recipePreferences();
         var choices = new ArrayList<Choice>();
-        var parentRecipe = parent.recipeId().flatMap(manager::byKey).orElse(null);
+        var parentRecipe = parent.recipeId().map(RecipeData::key).map(manager::byKey).orElse(null);
         if (parentRecipe != null && RecipePreference.supports(parentRecipe.value())) {
-            var ingredients = parentRecipe.value().getIngredients();
+            var ingredients = RecipeData.ingredients(parentRecipe.value());
             for (int slot = 0; slot < ingredients.size(); slot++) {
-                var options = new LinkedHashMap<ResourceLocation, ItemStack>();
-                for (var item : ingredients.get(slot).getItems()) {
+                var options = new LinkedHashMap<Identifier, ItemStack>();
+                for (var item : ingredients.get(slot).stream().flatMap(ingredient -> RecipeData.options(ingredient, level).stream()).toList()) {
                     options.putIfAbsent(RecipePreference.item(item), item);
                 }
                 if (options.size() < 2 || !options.containsKey(RecipePreference.item(child.stack()))) continue;
-                String key = RecipePreference.ingredient(parentRecipe.id(), slot);
+                String key = RecipePreference.ingredient(parentRecipe.id().identifier(), slot);
                 Component group = Component.translatable("anvilautotree.alternatives.slot", parent.stack().getHoverName(), slot + 1);
                 choices.add(automatic(key, group, preferences.get(key)));
                 options.forEach((id, stack) -> choices.add(new Choice(key, id, List.of(stack),
@@ -53,32 +56,33 @@ final class RecipeChoicesWindow {
             }
         }
 
-        addRecipes(choices, child, manager.getRecipes(), level.registryAccess(), preferences);
-        if (parent.parent() < 0) addRecipes(choices, parent, manager.getRecipes(), level.registryAccess(), preferences);
+        addRecipes(choices, child, manager.values(), level, preferences);
+        if (parent.parent() < 0) addRecipes(choices, parent, manager.values(), level, preferences);
         return choices.isEmpty() ? null : new RecipeChoicesWindow(choices);
     }
 
     private static void addRecipes(List<Choice> choices, CraftNodePayload node, java.util.Collection<RecipeHolder<?>> recipes,
-                                   net.minecraft.core.HolderLookup.Provider registries,
-                                   java.util.Map<String, ResourceLocation> preferences) {
+                                   net.minecraft.world.level.Level level,
+                                   java.util.Map<String, Identifier> preferences) {
         var matches = recipes.stream()
             .filter(holder -> RecipePreference.supports(holder.value()) && ItemStack.isSameItemSameComponents(
-                holder.value().getResultItem(registries), node.stack()))
+                RecipeData.result(holder.value(), level), node.stack()))
             .sorted(java.util.Comparator.comparing(RecipeHolder::id)).toList();
         if (matches.size() < 2) return;
         String key = RecipePreference.recipe(node.stack());
         Component group = Component.translatable("anvilautotree.alternatives.output", node.stack().getHoverName());
         choices.add(automatic(key, group, preferences.get(key)));
         for (var holder : matches) {
-            var inputs = holder.value().getIngredients().stream()
-                .flatMap(ingredient -> Arrays.stream(ingredient.getItems()).limit(1)).toList();
-            var label = inputs.isEmpty() ? Component.literal(holder.id().toString()) : inputs.getFirst().getHoverName();
-            choices.add(new Choice(key, holder.id(), inputs, label,
-                group.copy().append(" · ").append(holder.id().toString()), holder.id().equals(preferences.get(key))));
+            var inputs = RecipeData.ingredients(holder.value()).stream()
+                .flatMap(Optional::stream)
+                .flatMap(ingredient -> RecipeData.options(ingredient, level).stream().limit(1)).toList();
+            var label = inputs.isEmpty() ? Component.literal(holder.id().identifier().toString()) : inputs.getFirst().getHoverName();
+            choices.add(new Choice(key, holder.id().identifier(), inputs, label,
+                group.copy().append(" · ").append(holder.id().identifier().toString()), holder.id().identifier().equals(preferences.get(key))));
         }
     }
 
-    private static Choice automatic(String key, Component group, ResourceLocation selected) {
+    private static Choice automatic(String key, Component group, Identifier selected) {
         return new Choice(key, null, List.of(), Component.translatable("anvilautotree.alternatives.automatic"), group, selected == null);
     }
 
@@ -106,17 +110,16 @@ final class RecipeChoicesWindow {
             && y >= rectangle.getY() && y < rectangle.getY() + rectangle.getHeight();
     }
 
-    void render(GuiGraphics graphics, int mouseX, int mouseY) {
+    void render(GuiGraphicsExtractor graphics, int mouseX, int mouseY) {
         var mc = Minecraft.getInstance();
         layout(mc.screen.width, mc.screen.height);
         var font = mc.font;
-        graphics.pose().pushPose();
-        graphics.pose().translate(0, 0, 650);
+        graphics.nextStratum();
         graphics.fill(0, 0, screenWidth, screenHeight, 0x55000000);
         if (renderer != null) renderer.render(graphics);
         else graphics.fill(bounds.getX(), bounds.getY(), bounds.getX() + bounds.getWidth(),
             bounds.getY() + bounds.getHeight(), 0xFFBDBDBD);
-        graphics.drawCenteredString(font, Component.translatable("anvilautotree.alternatives.title"),
+        graphics.centeredText(font, Component.translatable("anvilautotree.alternatives.title"),
             screenWidth / 2, bounds.getY() + 7, 0xFFFFFFFF);
         Choice hovered = null;
         for (int index = 0; index < rows; index++) {
@@ -128,19 +131,18 @@ final class RecipeChoicesWindow {
                 choice.selected() ? 0xFF9393B0 : over ? 0xFFDDDDDD : 0xFFC6C6C6);
             int x = row.getX() + 4;
             for (int slot = 0; slot < Math.min(4, choice.items().size()); slot++) {
-                graphics.renderItem(choice.items().get(slot), x, row.getY() + 2);
+                graphics.item(choice.items().get(slot), x, row.getY() + 2);
                 x += 17;
             }
             int width = row.getX() + row.getWidth() - x - 6;
-            graphics.drawString(font, font.plainSubstrByWidth(choice.label().getString(), width),
+            graphics.text(font, font.plainSubstrByWidth(choice.label().getString(), width),
                 x, row.getY() + 6, 0xFF202020, false);
             if (over) hovered = choice;
         }
-        graphics.drawCenteredString(font, Component.translatable("anvilautotree.alternatives.footer",
+        graphics.centeredText(font, Component.translatable("anvilautotree.alternatives.footer",
             offset + 1, offset + rows, choices.size()), screenWidth / 2,
             bounds.getY() + bounds.getHeight() - 12, 0xFFFFFFFF);
-        if (hovered != null) graphics.renderTooltip(font, hovered.group(), mouseX, mouseY);
-        graphics.pose().popPose();
+        if (hovered != null) graphics.setTooltipForNextFrame(font, hovered.group(), mouseX, mouseY);
     }
 
     boolean click(double x, double y) {
@@ -159,6 +161,6 @@ final class RecipeChoicesWindow {
         offset = Math.clamp(offset - (int) Math.signum(delta), 0, Math.max(0, choices.size() - rows));
     }
 
-    private record Choice(String key, ResourceLocation id, List<ItemStack> items, Component label, Component group,
+    private record Choice(String key, Identifier id, List<ItemStack> items, Component label, Component group,
                           boolean selected) {}
 }

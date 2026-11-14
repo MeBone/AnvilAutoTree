@@ -2,13 +2,9 @@ package dev.lanhuo.anvilautotree.craft;
 
 import dev.dubhe.anvilcraft.api.itemhandler.unlimited.UnlimitedItemStacksResourceHandler;
 import net.minecraft.world.item.ItemStack;
+import net.neoforged.neoforge.transfer.item.ItemResource;
+import net.neoforged.neoforge.transfer.transaction.Transaction;
 
-/**
- * 直接读写超维存储和潜影集装箱共用的物品处理器。
- *
- * <p>处理器在修改后会触发 {@code onContentsChanged}，进而保存存档并同步终端界面，
- * 因此这里不需要额外发同步包。</p>
- */
 public final class ItemHandlerStorageAccess implements StorageAccess {
     private final UnlimitedItemStacksResourceHandler handler;
 
@@ -18,37 +14,24 @@ public final class ItemHandlerStorageAccess implements StorageAccess {
 
     @Override
     public long count(ItemStack proto) {
-        long total = 0L;
-        int slots = this.handler.getSlots();
-        for (int slot = 0; slot < slots; slot++) {
-            ItemStack stack = this.handler.getStackInSlot(slot);
-            if (stack.isEmpty() || !ItemStack.isSameItemSameComponents(stack, proto)) {
-                continue;
-            }
-            total += Math.max(0L, this.handler.getAmountAsLong(slot));
-        }
-        return total;
+        return handler.count(ItemResource.of(proto));
     }
 
     @Override
     public int extract(ItemStack proto, int amount, boolean simulate) {
-        if (simulate) {
-            return (int) Math.min(amount, this.count(proto));
+        try (var transaction = Transaction.openRoot()) {
+            int extracted = handler.extract(ItemResource.of(proto), amount, transaction);
+            if (!simulate) transaction.commit();
+            return extracted;
         }
-        int remaining = amount;
-        int slots = this.handler.getSlots();
-        for (int slot = 0; slot < slots && remaining > 0; slot++) {
-            ItemStack stack = this.handler.getStackInSlot(slot);
-            if (stack.isEmpty() || !ItemStack.isSameItemSameComponents(stack, proto)) {
-                continue;
-            }
-            remaining -= this.handler.extractUnlimited(slot, remaining, false).getCount();
-        }
-        return amount - remaining;
     }
 
     @Override
     public ItemStack insert(ItemStack stack) {
-        return this.handler.insertItem(stack, false);
+        try (var transaction = Transaction.openRoot()) {
+            int inserted = handler.insert(ItemResource.of(stack), stack.getCount(), transaction);
+            transaction.commit();
+            return stack.copyWithCount(stack.getCount() - inserted);
+        }
     }
 }

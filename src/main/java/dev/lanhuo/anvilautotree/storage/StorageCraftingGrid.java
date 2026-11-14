@@ -18,8 +18,6 @@ import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.crafting.CraftingInput;
 import net.minecraft.world.item.crafting.CraftingRecipe;
 import net.minecraft.world.item.crafting.RecipeHolder;
-import net.minecraft.world.item.crafting.RecipeType;
-import net.minecraft.world.item.crafting.SingleRecipeInput;
 
 /** Uses the same crafting-grid target as AnvilCraft's own transfer. */
 public final class StorageCraftingGrid {
@@ -66,8 +64,8 @@ public final class StorageCraftingGrid {
         List<ItemStack> replaced;
         if (stonecutter) {
             var input = inputs.getFirst();
-            var recipes = player.level().getRecipeManager().getRecipesFor(
-                RecipeType.STONECUTTING, new SingleRecipeInput(input), player.level());
+            var recipes = player.level().recipeAccess().stonecutterRecipes().selectByInput(input).entries().stream()
+                .flatMap(entry -> entry.recipe().recipe().stream()).toList();
             int index = recipes.indexOf(recipe);
             if (index < 0) return false;
             after = before.withStonecutterInput(input.copy()).withStonecutterSelected(index);

@@ -9,7 +9,7 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import net.minecraft.network.chat.Component;
-import net.minecraft.resources.ResourceLocation;
+import net.minecraft.resources.Identifier;
 import java.util.Optional;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.world.item.ItemStack;
@@ -40,7 +40,7 @@ public final class CraftPlanner {
 
     private final ServerLevel level;
     private final StorageAccess storage;
-    private final Map<String, ResourceLocation> preferences;
+    private final Map<String, Identifier> preferences;
     private final Map<StackKey, Long> storedCounts = new HashMap<>();
     private final Map<StackKey, Long> produced = new HashMap<>();
     private final Map<StackKey, Long> reserved = new HashMap<>();
@@ -48,7 +48,7 @@ public final class CraftPlanner {
     private final List<CraftStep> steps = new ArrayList<>();
     private final Deque<StackKey> path = new ArrayDeque<>();
 
-    private CraftPlanner(ServerLevel level, StorageAccess storage, Map<String, ResourceLocation> preferences) {
+    private CraftPlanner(ServerLevel level, StorageAccess storage, Map<String, Identifier> preferences) {
         this.level = level;
         this.storage = storage;
         this.preferences = preferences;
@@ -59,9 +59,9 @@ public final class CraftPlanner {
     }
 
     public static CraftPlan plan(ServerLevel level, StorageAccess storage, RecipeHolder<?> target, boolean stonecutter,
-                                 int requestedItems, boolean produceTarget, Map<String, ResourceLocation> preferences) {
+                                 int requestedItems, boolean produceTarget, Map<String, Identifier> preferences) {
         CraftPlanner planner = new CraftPlanner(level, storage, preferences);
-        ItemStack output = target.value().getResultItem(level.registryAccess());
+        ItemStack output = RecipeData.result(target.value(), level);
         List<Component> preview = new ArrayList<>();
         preview.add(Component.translatable("anvilautotree.preview.target", output.getHoverName()));
         List<IngredientChoice> root = planner.ingredientsOf(target, stonecutter, false);
@@ -81,7 +81,7 @@ public final class CraftPlanner {
     }
 
     static CraftPlan planStructure(ServerLevel level, StorageAccess storage, RecipeHolder<?> recipe, ItemStack icon, int quantity,
-                                   List<IngredientChoice> materials, Map<String, ResourceLocation> preferences) {
+                                   List<IngredientChoice> materials, Map<String, Identifier> preferences) {
         return new CraftPlanner(level, storage, preferences).planMaterials(recipe, false, quantity, icon, materials, List.of(), false, List.of());
     }
 
@@ -115,7 +115,7 @@ public final class CraftPlanner {
             if (this.steps.size() >= AutoCraftConfig.MAX_STEPS.get()) {
                 errors.add(Component.translatable("anvilautotree.error.too_complex"));
             } else {
-                this.steps.add(new CraftStep(root, output, quantity, stonecutter, target.id()));
+                this.steps.add(new CraftStep(root, output, quantity, stonecutter, target.id().identifier()));
             }
         }
         for (CraftStep step : this.steps) {
@@ -133,7 +133,7 @@ public final class CraftPlanner {
             produceTarget ? quantity : 0,
             !errors.isEmpty(),
             rootChildren,
-            Optional.of(target.id())
+            Optional.of(target.id().identifier())
         );
         return new CraftPlan(this.steps, preview, errors, true, tree, gridInputs);
     }
@@ -141,7 +141,7 @@ public final class CraftPlanner {
     private static List<ItemStack> gridInputs(Recipe<?> recipe, List<IngredientChoice> choices, boolean stonecutter) {
         if (stonecutter) return List.of(choices.getFirst().key().proto());
         int width = recipe instanceof ShapedRecipe shaped ? shaped.getWidth() : 3;
-        var ingredients = recipe.getIngredients();
+        var ingredients = RecipeData.ingredients(recipe);
         var chosen = choices.iterator();
         var slots = new ArrayList<>(java.util.Collections.nCopies(9, ItemStack.EMPTY));
         for (int slot = 0; slot < ingredients.size(); slot++) {
@@ -162,7 +162,7 @@ public final class CraftPlanner {
         var crafting = (CraftingRecipe) recipe;
         int width = crafting instanceof ShapedRecipe shaped ? shaped.getWidth() : Math.min(3, choices.size());
         int height = crafting instanceof ShapedRecipe shaped ? shaped.getHeight() : Math.ceilDiv(choices.size(), width);
-        var ingredients = crafting.getIngredients();
+        var ingredients = RecipeData.ingredients(crafting);
         var stacks = new ArrayList<ItemStack>(width * height);
         var chosen = choices.iterator();
         for (int slot = 0; slot < width * height; slot++) {
@@ -173,10 +173,11 @@ public final class CraftPlanner {
     }
 
     private <T extends RecipeInput> ItemStack assembleBatch(Recipe<T> recipe, T input) {
-        if (!recipe.matches(input, this.level) || recipe.getRemainingItems(input).stream().anyMatch(stack -> !stack.isEmpty())) {
+        if (!recipe.matches(input, this.level) || (recipe instanceof CraftingRecipe crafting && input instanceof CraftingInput grid
+            && crafting.getRemainingItems(grid).stream().anyMatch(stack -> !stack.isEmpty()))) {
             return ItemStack.EMPTY;
         }
-        return recipe.assemble(input, this.level.registryAccess());
+        return recipe.assemble(input);
     }
 
     /**
@@ -228,8 +229,8 @@ public final class CraftPlanner {
                 throw MissingRecipeException.leaf(key, false, required, stored);
             }
             var preference = this.preferences.get(RecipePreference.recipe(key.proto()));
-            if (preference != null && candidates.stream().anyMatch(candidate -> candidate.holder().id().equals(preference))) {
-                candidates = candidates.stream().filter(candidate -> candidate.holder().id().equals(preference)).toList();
+            if (preference != null && candidates.stream().anyMatch(candidate -> candidate.holder().id().identifier().equals(preference))) {
+                candidates = candidates.stream().filter(candidate -> candidate.holder().id().identifier().equals(preference)).toList();
             }
             MissingRecipeException failure = null;
             for (Candidate candidate : candidates) {
@@ -250,12 +251,12 @@ public final class CraftPlanner {
                         candidate.output(),
                         (int) crafts,
                         candidate.stonecutter(),
-                        candidate.holder().id()
+                        candidate.holder().id().identifier()
                     ));
-                    return new CraftTreeNode(key.proto(), required, stored, (int) crafts, false, children, Optional.of(candidate.holder().id()));
+                    return new CraftTreeNode(key.proto(), required, stored, (int) crafts, false, children, Optional.of(candidate.holder().id().identifier()));
                 } catch (MissingRecipeException exception) {
                     this.restore(snapshot);
-                    if (failure == null) failure = exception.under(key, required, stored, candidate.holder().id());
+                    if (failure == null) failure = exception.under(key, required, stored, candidate.holder().id().identifier());
                 } catch (TooComplexException exception) {
                     this.restore(snapshot);
                     throw exception;
@@ -284,8 +285,8 @@ public final class CraftPlanner {
 
     private List<Candidate> findCandidates(StackKey key) {
         List<Candidate> found = new ArrayList<>();
-        for (RecipeHolder<CraftingRecipe> holder : this.level.getRecipeManager().getAllRecipesFor(RecipeType.CRAFTING)) {
-            ItemStack output = holder.value().getResultItem(this.level.registryAccess());
+        for (RecipeHolder<CraftingRecipe> holder : this.level.recipeAccess().recipeMap().byType(RecipeType.CRAFTING)) {
+            ItemStack output = RecipeData.result(holder.value(), level);
             if (output.isEmpty() || !ItemStack.isSameItemSameComponents(output, key.proto())) {
                 continue;
             }
@@ -298,8 +299,8 @@ public final class CraftPlanner {
                 found.add(new Candidate(holder, ingredients, assembled, false));
             }
         }
-        for (RecipeHolder<StonecutterRecipe> holder : this.level.getRecipeManager().getAllRecipesFor(RecipeType.STONECUTTING)) {
-            ItemStack output = holder.value().getResultItem(this.level.registryAccess());
+        for (RecipeHolder<StonecutterRecipe> holder : this.level.recipeAccess().recipeMap().byType(RecipeType.STONECUTTING)) {
+            ItemStack output = RecipeData.result(holder.value(), level);
             if (output.isEmpty() || !ItemStack.isSameItemSameComponents(output, key.proto())) {
                 continue;
             }
@@ -312,7 +313,7 @@ public final class CraftPlanner {
                 found.add(new Candidate(holder, ingredients, assembled, true));
             }
         }
-        found.sort(Comparator.<Candidate>comparingInt(candidate -> candidate.ingredients().size()).thenComparing(candidate -> candidate.holder().id()));
+        found.sort(Comparator.<Candidate>comparingInt(candidate -> candidate.ingredients().size()).thenComparing(candidate -> candidate.holder().id().identifier()));
         return List.copyOf(found);
     }
 
@@ -324,12 +325,12 @@ public final class CraftPlanner {
      */
     private List<IngredientChoice> ingredientsOf(RecipeHolder<?> holder, boolean stonecutter, boolean requireNoRemainder) {
         var recipe = holder.value();
-        List<Ingredient> ingredients;
+        List<Optional<Ingredient>> ingredients;
         if (stonecutter) {
             if (!(recipe instanceof StonecutterRecipe)) {
                 return List.of();
             }
-            ingredients = recipe.getIngredients();
+            ingredients = RecipeData.ingredients(recipe);
         } else {
             if (!(recipe instanceof CraftingRecipe crafting) || crafting.isSpecial()) {
                 return List.of();
@@ -337,22 +338,22 @@ public final class CraftPlanner {
             if (crafting instanceof ShapedRecipe shaped && (shaped.getWidth() > 3 || shaped.getHeight() > 3)) {
                 return List.of();
             }
-            if (crafting instanceof ShapelessRecipe shapeless && shapeless.getIngredients().size() > 9) {
+            if (crafting instanceof ShapelessRecipe shapeless && RecipeData.ingredients(shapeless).size() > 9) {
                 return List.of();
             }
-            ingredients = crafting.getIngredients();
+            ingredients = RecipeData.ingredients(crafting);
         }
         List<IngredientChoice> result = new ArrayList<>();
         for (int slot = 0; slot < ingredients.size(); slot++) {
-            Ingredient ingredient = ingredients.get(slot);
+            var ingredient = ingredients.get(slot);
             if (ingredient.isEmpty()) {
                 continue;
             }
-            ItemStack[] options = ingredient.getItems();
+            ItemStack[] options = RecipeData.options(ingredient.orElseThrow(), this.level).toArray(ItemStack[]::new);
             if (options.length == 0) {
                 return List.of();
             }
-            ItemStack chosen = this.chooseOption(options, requireNoRemainder, this.preferences.get(RecipePreference.ingredient(holder.id(), slot)));
+            ItemStack chosen = this.chooseOption(options, requireNoRemainder, this.preferences.get(RecipePreference.ingredient(holder.id().identifier(), slot)));
             if (chosen.isEmpty()) {
                 return List.of();
             }
@@ -361,11 +362,11 @@ public final class CraftPlanner {
         return result;
     }
 
-    private ItemStack chooseOption(ItemStack[] options, boolean requireNoRemainder, ResourceLocation preferredItem) {
+    private ItemStack chooseOption(ItemStack[] options, boolean requireNoRemainder, Identifier preferredItem) {
         ItemStack best = ItemStack.EMPTY;
         long bestAmount = -1L;
         for (ItemStack option : options) {
-            if (requireNoRemainder && option.hasCraftingRemainingItem()) {
+            if (requireNoRemainder && option.getItem().getCraftingRemainder(option) != null) {
                 continue;
             }
             if (RecipePreference.item(option).equals(preferredItem)) return option;
@@ -434,7 +435,7 @@ public final class CraftPlanner {
         /**
          * 失败沿着递归向上传播时，把上层物品也挂进这条断链，玩家在树里能看到「哪个物品的哪条分支补不齐」。
          */
-        private MissingRecipeException under(StackKey parentKey, long parentRequired, long parentStored, ResourceLocation recipeId) {
+        private MissingRecipeException under(StackKey parentKey, long parentRequired, long parentStored, Identifier recipeId) {
             return new MissingRecipeException(
                 this.key,
                 this.cycle,

@@ -4,7 +4,7 @@ import dev.lanhuo.anvilautotree.AnvilAutoTree;
 import dev.lanhuo.anvilautotree.craft.RecipePreference;
 import java.util.LinkedHashMap;
 import java.util.List;
-import net.minecraft.resources.ResourceLocation;
+import net.minecraft.resources.Identifier;
 import net.minecraft.client.renderer.Rect2i;
 import net.neoforged.api.distmarker.Dist;
 import net.neoforged.fml.ModContainer;
@@ -49,12 +49,12 @@ public final class AutoCraftClientConfig {
                 : new ConfigurationScreen.ConfigurationSectionScreen(root, type, config, title)));
     }
 
-    static LinkedHashMap<String, ResourceLocation> recipePreferences() {
-        var preferences = new LinkedHashMap<String, ResourceLocation>();
+    static LinkedHashMap<String, Identifier> recipePreferences() {
+        var preferences = new LinkedHashMap<String, Identifier>();
         for (String entry : RECIPE_PREFERENCES.get()) {
             int separator = entry.indexOf('=');
             if (separator <= 0 || separator > 512) continue;
-            var id = ResourceLocation.tryParse(entry.substring(separator + 1));
+            var id = Identifier.tryParse(entry.substring(separator + 1));
             if (id != null && preferences.size() < RecipePreference.MAX_ENTRIES) {
                 preferences.put(entry.substring(0, separator), id);
             }
@@ -62,7 +62,7 @@ public final class AutoCraftClientConfig {
         return preferences;
     }
 
-    static void saveRecipePreference(String key, ResourceLocation selection) {
+    static void saveRecipePreference(String key, Identifier selection) {
         var preferences = recipePreferences();
         preferences.remove(key);
         if (selection != null) {

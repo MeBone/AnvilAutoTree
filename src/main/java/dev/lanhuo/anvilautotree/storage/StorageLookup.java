@@ -35,7 +35,7 @@ public final class StorageLookup {
         RemoteStorage remote = RemoteStorage.ACCESS;
         if (remote != null) {
             try {
-                var playerId = player.getGameProfile().getId();
+                var playerId = player.getUUID();
                 long position = sourcePos.asLong();
                 if (remote.sessions.get(null) instanceof Map<?, ?> sessions
                     && sessions.get(playerId) instanceof Map<?, ?> byPosition && byPosition.containsKey(position)) {
@@ -56,7 +56,7 @@ public final class StorageLookup {
             }
         }
 
-        if (player.level().hasChunkAt(sourcePos) && player.canInteractWithBlock(sourcePos, 4.0)
+        if (player.level().hasChunkAt(sourcePos) && player.isWithinBlockInteractionRange(sourcePos, 4.0)
             && player.level().getBlockEntity(sourcePos) instanceof StorageBlockEntity container
             && container.getId() != null) {
             return Storages.get().get(container.getId()).filter(storage -> kindOf(storage).isPresent());
@@ -71,7 +71,7 @@ public final class StorageLookup {
     private static Optional<BaseStorage<?>> resolveBoundHyperdimension(ServerPlayer player, UUID id) {
         boolean bound = TerminalItem.getAll(player).stream()
             .anyMatch(stack -> stack.getItem() instanceof HyperdimensionTerminalItem
-                && id.equals(StorageServerStub.terminalTargetId(player, stack)));
+                && id.equals(((TerminalItem) stack.getItem()).targetId(player, stack)));
         return bound ? Storages.get().get(id).filter(HyperdimensionStorage.class::isInstance) : Optional.empty();
     }
 

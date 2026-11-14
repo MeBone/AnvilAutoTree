@@ -64,8 +64,8 @@ final class StructurePacking {
                 .forEach((tag, count) -> tags.merge(tag, (long) count, Long::sum));
         }
         for (var entry : tags.entrySet()) {
-            var options = player.registryAccess().registryOrThrow(Registries.BLOCK)
-                .getTag(entry.getKey()).orElseThrow(UnpackableMaterial::new);
+            var options = player.registryAccess().lookupOrThrow(Registries.BLOCK)
+                .get(entry.getKey()).orElseThrow(UnpackableMaterial::new);
             var choice = options.stream().map(block -> new ItemStack(block.value().asItem()))
                 .filter(StructurePacking::canPack)
                 .max(Comparator.comparingLong(stack ->

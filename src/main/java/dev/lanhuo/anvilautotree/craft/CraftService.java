@@ -53,7 +53,7 @@ public final class CraftService {
             fail(player, payload, "anvilautotree.error.not_unlocked", kind);
             return;
         }
-        Optional<? extends RecipeHolder<?>> found = level.getRecipeManager().byKey(payload.recipeId());
+        Optional<? extends RecipeHolder<?>> found = level.recipeAccess().byKey(RecipeData.key(payload.recipeId()));
         if (found.isEmpty()) {
             fail(player, payload, "anvilautotree.error.unknown_recipe", kind);
             return;
@@ -73,7 +73,7 @@ public final class CraftService {
             return;
         }
         StorageAccess stock = new ItemHandlerStorageAccess(storage.getItems());
-        var result = recipe.value().getResultItem(level.registryAccess());
+        var result = RecipeData.result(recipe.value(), level);
         if (payload.pickBlock() && !result.isEmpty() && stock.count(result) > 0) {
             fail(player, payload, "anvilautotree.error.pick_stock", kind);
             return;
@@ -139,8 +139,8 @@ public final class CraftService {
             );
             return;
         }
-        boolean preferredInputs = !plan.gridInputs().isEmpty() && java.util.stream.IntStream.range(0, recipe.value().getIngredients().size())
-            .anyMatch(slot -> payload.preferences().containsKey(RecipePreference.ingredient(recipe.id(), slot)));
+        boolean preferredInputs = !plan.gridInputs().isEmpty() && java.util.stream.IntStream.range(0, RecipeData.ingredients(recipe.value()).size())
+            .anyMatch(slot -> payload.preferences().containsKey(RecipePreference.ingredient(recipe.id().identifier(), slot)));
         boolean fillIngredients = (!useInventory || recipe != original || preferredInputs) && !plan.gridInputs().isEmpty();
         if (plan.steps().isEmpty() && packing == null && !fillIngredients) {
             PacketDistributor.sendToPlayer(
@@ -177,9 +177,9 @@ public final class CraftService {
     private static CraftPlan tryPickAlternatives(ServerLevel level, StorageAccess access, RecipeHolder<?> original,
                                                  ItemStack result, CraftRequestPayload payload, CraftPlan initial) {
         if (result.isEmpty()) return initial;
-        var alternatives = level.getRecipeManager().getRecipes().stream()
-            .filter(holder -> !holder.id().equals(original.id()) && RecipePreference.supports(holder.value())
-                && ItemStack.isSameItemSameComponents(holder.value().getResultItem(level.registryAccess()), result))
+        var alternatives = level.recipeAccess().getRecipes().stream()
+            .filter(holder -> !holder.id().identifier().equals(original.id()) && RecipePreference.supports(holder.value())
+                && ItemStack.isSameItemSameComponents(RecipeData.result(holder.value(), level), result))
             .sorted(java.util.Comparator.comparing(RecipeHolder::id)).toList();
         CraftPlan display = initial;
         for (var candidate : alternatives) {
@@ -193,11 +193,11 @@ public final class CraftService {
 
     private static RecipeHolder<?> selectTarget(ServerLevel level, RecipeHolder<?> original, CraftRequestPayload payload) {
         if (!RecipePreference.supports(original.value())) return original;
-        ItemStack result = original.value().getResultItem(level.registryAccess());
+        ItemStack result = RecipeData.result(original.value(), level);
         var preferred = payload.preferences().get(RecipePreference.recipe(result));
-        return preferred == null ? original : level.getRecipeManager().byKey(preferred)
+        return preferred == null ? original : level.recipeAccess().byKey(RecipeData.key(preferred))
             .filter(holder -> RecipePreference.supports(holder.value()) && ItemStack.isSameItemSameComponents(
-                holder.value().getResultItem(level.registryAccess()), result))
+                RecipeData.result(holder.value(), level), result))
             .orElse(original);
     }
 

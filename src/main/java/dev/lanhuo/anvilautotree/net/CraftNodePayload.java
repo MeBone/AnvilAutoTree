@@ -4,7 +4,7 @@ import dev.lanhuo.anvilautotree.craft.CraftTreeNode;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
-import net.minecraft.resources.ResourceLocation;
+import net.minecraft.resources.Identifier;
 import net.minecraft.network.RegistryFriendlyByteBuf;
 import net.minecraft.network.codec.ByteBufCodecs;
 import net.minecraft.network.codec.StreamCodec;
@@ -27,7 +27,7 @@ public record CraftNodePayload(
     long stored,
     int crafts,
     boolean missing,
-    Optional<ResourceLocation> recipeId
+    Optional<Identifier> recipeId
 ) {
     public CraftNodePayload(int parent, ItemStack stack, long required, long stored, int crafts, boolean missing) {
         this(parent, stack, required, stored, crafts, missing, Optional.empty());
@@ -48,8 +48,8 @@ public record CraftNodePayload(
         CraftNodePayload::missing,
         CraftNodePayload::new
     );
-    private static final StreamCodec<RegistryFriendlyByteBuf, Optional<ResourceLocation>> RECIPE_CODEC =
-        ByteBufCodecs.optional(ResourceLocation.STREAM_CODEC).cast();
+    private static final StreamCodec<RegistryFriendlyByteBuf, Optional<Identifier>> RECIPE_CODEC =
+        ByteBufCodecs.optional(Identifier.STREAM_CODEC).cast();
     public static final StreamCodec<RegistryFriendlyByteBuf, CraftNodePayload> STREAM_CODEC = StreamCodec.of(
         (buf, node) -> {
             BASE_CODEC.encode(buf, node);

@@ -2,7 +2,7 @@ package dev.lanhuo.anvilautotree.craft;
 
 import java.util.List;
 import java.util.Optional;
-import net.minecraft.resources.ResourceLocation;
+import net.minecraft.resources.Identifier;
 import net.minecraft.world.item.ItemStack;
 
 /**
@@ -22,14 +22,14 @@ public record CraftTreeNode(
     int crafts,
     boolean missing,
     List<CraftTreeNode> children,
-    Optional<ResourceLocation> recipeId
+    Optional<Identifier> recipeId
 ) {
     public CraftTreeNode {
         stack = stack.copyWithCount(1);
         children = List.copyOf(children);
     }
 
-    public CraftTreeNode withRecipe(ResourceLocation recipeId) {
+    public CraftTreeNode withRecipe(Identifier recipeId) {
         return new CraftTreeNode(stack, required, stored, crafts, missing, children, Optional.of(recipeId));
     }
 

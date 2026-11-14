@@ -1,17 +1,22 @@
 plugins {
     id 'java'
-    id 'net.neoforged.moddev' version '2.0.140'
+    id 'net.neoforged.moddev' version '2.0.143' apply false
+}
+
+def localGameClasspath = providers.gradleProperty('localGameClasspath')
+if (!localGameClasspath.isPresent()) {
+    apply plugin: 'net.neoforged.moddev'
 }
 
 version = project.mod_version
 group = project.maven_group
 
 base {
-    archivesName = project.mod_id
+    archivesName = "${project.mod_id}-mc26.1.2"
 }
 
 java {
-    toolchain.languageVersion = JavaLanguageVersion.of(21)
+    toolchain.languageVersion = JavaLanguageVersion.of(25)
 }
 
 repositories {
@@ -27,39 +32,46 @@ repositories {
     mavenCentral()
 }
 
-neoForge {
-    version = project.neoforge_version
+if (localGameClasspath.isPresent()) {
+    dependencies {
+        compileOnly files(file(localGameClasspath.get()).readLines('UTF-8'))
+    }
+} else {
+    neoForge {
+        version = project.neoforge_version
 
-    runs {
-        client {
-            client()
+        runs {
+            client {
+                client()
+            }
+            server {
+                server()
+            }
         }
-        server {
-            server()
+
+        mods {
+            "${project.mod_id}" {
+                sourceSet(sourceSets.main)
+            }
         }
     }
 
-    mods {
-        "${project.mod_id}" {
-            sourceSet(sourceSets.main)
+    dependencies {
+        compileOnly "dev.dubhe:anvilcraft-neoforge-26.1.2:${project.anvilcraft_version}"
+        compileOnly("dev.anvilcraft.lib:anvillib-ui-neoforge-26.1:${project.anvillib_ui_version}") {
+            transitive = false
         }
-    }
-}
+        compileOnly "dev.anvilcraft.lib:anvillib-multiblock-neoforge-26.1:${project.anvillib_ui_version}"
+        compileOnly "mezz.jei:jei-26.1.2-neoforge:${project.jei_version}"
 
-dependencies {
-    compileOnly "dev.dubhe:anvilcraft-neoforge-1.21.1:${project.anvilcraft_version}"
-    compileOnly("dev.anvilcraft.lib:anvillib-ui-neoforge-1.21.1:${project.anvillib_ui_version}") {
-        transitive = false
+        runtimeOnly "dev.dubhe:anvilcraft-neoforge-26.1.2:${project.anvilcraft_version}"
+        runtimeOnly "mezz.jei:jei-26.1.2-neoforge:${project.jei_version}"
     }
-    compileOnly "mezz.jei:jei-1.21.1-neoforge:${project.jei_version}"
-
-    runtimeOnly "dev.dubhe:anvilcraft-neoforge-1.21.1:${project.anvilcraft_version}"
-    runtimeOnly "mezz.jei:jei-1.21.1-neoforge:${project.jei_version}"
 }
 
 tasks.withType(JavaCompile).configureEach {
     options.encoding = 'UTF-8'
-    options.release = 21
+    options.release = 25
 }
 
 processResources {

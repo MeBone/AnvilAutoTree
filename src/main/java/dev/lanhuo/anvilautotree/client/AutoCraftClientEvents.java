@@ -22,7 +22,7 @@ import org.lwjgl.glfw.GLFW;
  * <p>侧边栏不再替换当前界面，而是挂在 {@link ScreenEvent.Render.Post} 上叠加绘制；输入事件在
  * {@code Pre} 阶段判断命中面板后取消，避免点击穿透到 JEI 配方界面或终端容器界面。</p>
  */
-@EventBusSubscriber(modid = AnvilAutoTree.MOD_ID, bus = EventBusSubscriber.Bus.GAME, value = Dist.CLIENT)
+@EventBusSubscriber(modid = AnvilAutoTree.MOD_ID, value = Dist.CLIENT)
 public final class AutoCraftClientEvents {
     private AutoCraftClientEvents() {
     }
@@ -51,6 +51,11 @@ public final class AutoCraftClientEvents {
 
     @SubscribeEvent
     public static void onKeyPressed(ScreenEvent.KeyPressed.Pre event) {
+        if (net.neoforged.fml.ModList.get().isLoaded("jei")
+            && dev.lanhuo.anvilautotree.compat.AutoCraftJeiPlugin.bookmark(event.getKeyEvent())) {
+            event.setCanceled(true);
+            return;
+        }
         if (CraftTreeOverlay.LIVE.recipeChoicesKeyPressed(event.getKeyCode())) {
             event.setCanceled(true);
             return;
@@ -73,7 +78,7 @@ public final class AutoCraftClientEvents {
 
     @SubscribeEvent
     public static void onCharacterTyped(ScreenEvent.CharacterTyped.Pre event) {
-        if (CraftTreeOverlay.LIVE.quantityCharTyped(event.getCodePoint(), event.getModifiers())) {
+        if (CraftTreeOverlay.LIVE.quantityCharTyped(event.getCodePoint())) {
             event.setCanceled(true);
         }
     }

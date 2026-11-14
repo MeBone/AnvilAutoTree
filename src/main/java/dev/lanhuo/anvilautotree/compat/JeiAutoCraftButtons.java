@@ -16,7 +16,7 @@ import mezz.jei.api.recipe.advanced.IRecipeButtonControllerFactory;
 import mezz.jei.api.registration.IAdvancedRegistration;
 import mezz.jei.api.runtime.IJeiRuntime;
 import net.minecraft.client.Minecraft;
-import net.minecraft.client.gui.GuiGraphics;
+import net.minecraft.client.gui.GuiGraphicsExtractor;
 import net.minecraft.client.gui.screens.Screen;
 import net.minecraft.client.gui.screens.inventory.AbstractContainerScreen;
 import net.minecraft.network.chat.Component;
@@ -36,7 +36,7 @@ final class JeiAutoCraftButtons {
         }
 
         @Override
-        public void draw(GuiGraphics graphics, int x, int y) {
+        public void draw(GuiGraphicsExtractor graphics, int x, int y) {
             graphics.fill(x + 3, y, x + 7, y + 10, 0xFF422967);
             graphics.fill(x, y + 3, x + 10, y + 7, 0xFF422967);
             graphics.fill(x + 4, y + 1, x + 6, y + 9, 0xFFCB92FF);
@@ -96,7 +96,7 @@ final class JeiAutoCraftButtons {
                 return false;
             }
             if (!input.isSimulate()) {
-                target.transfer().startPlan(target.menu(), layout.getRecipe(), layout.getRecipeSlotsView(), player, Screen.hasShiftDown());
+                target.transfer().startPlan(target.menu(), layout.getRecipe(), layout.getRecipeSlotsView(), player, net.minecraft.client.Minecraft.getInstance().hasShiftDown());
                 if (runtime.get().getRecipesGui() instanceof Screen recipes && Minecraft.getInstance().screen == recipes) {
                     recipes.onClose();
                 }

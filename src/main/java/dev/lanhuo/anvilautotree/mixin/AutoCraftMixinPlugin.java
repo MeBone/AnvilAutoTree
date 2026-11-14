@@ -3,6 +3,7 @@ package dev.lanhuo.anvilautotree.mixin;
 import net.neoforged.api.distmarker.Dist;
 import net.neoforged.fml.ModList;
 import net.neoforged.fml.loading.FMLEnvironment;
+import net.neoforged.fml.loading.FMLLoader;
 import net.neoforged.fml.loading.LoadingModList;
 import org.spongepowered.asm.mixin.extensibility.IMixinConfigPlugin;
 import org.spongepowered.asm.mixin.extensibility.IMixinInfo;
@@ -25,7 +26,7 @@ public final class AutoCraftMixinPlugin implements IMixinConfigPlugin {
 
     @Override
     public boolean shouldApplyMixin(String targetClassName, String mixinClassName) {
-        return FMLEnvironment.dist == Dist.CLIENT && jeiLoaded();
+        return FMLEnvironment.getDist() == Dist.CLIENT && jeiLoaded();
     }
 
     /**
@@ -41,7 +42,8 @@ public final class AutoCraftMixinPlugin implements IMixinConfigPlugin {
             if (mods != null) {
                 return mods.isLoaded("jei");
             }
-            LoadingModList loading = LoadingModList.get();
+            var loader = FMLLoader.getCurrentOrNull();
+            LoadingModList loading = loader == null ? null : loader.getLoadingModList();
             if (loading != null) {
                 return loading.getModFileById("jei") != null;
             }

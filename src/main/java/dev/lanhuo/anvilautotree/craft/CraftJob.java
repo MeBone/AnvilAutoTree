@@ -7,7 +7,7 @@ import java.util.List;
 import java.util.function.BiPredicate;
 import java.util.function.Supplier;
 import net.minecraft.network.protocol.game.ClientboundContainerSetSlotPacket;
-import net.minecraft.network.protocol.game.ClientboundSetCarriedItemPacket;
+import net.minecraft.network.protocol.game.ClientboundSetHeldSlotPacket;
 import net.minecraft.world.entity.player.Inventory;
 import net.minecraft.network.chat.Component;
 import net.minecraft.server.level.ServerPlayer;
@@ -199,20 +199,20 @@ public final class CraftJob {
                 inventory.setItem(slot, output.split(output.getMaxStackSize()));
             }
             if (Inventory.isHotbarSlot(slot)) {
-                inventory.selected = slot;
+                inventory.setSelectedSlot(slot);
             } else {
                 inventory.pickSlot(slot);
                 this.player.connection.send(new ClientboundContainerSetSlotPacket(-2, 0, slot, inventory.getItem(slot)));
             }
-            this.player.connection.send(new ClientboundSetCarriedItemPacket(inventory.selected));
+            this.player.connection.send(new ClientboundSetHeldSlotPacket(inventory.getSelectedSlot()));
             this.deliveredToHand = true;
         }
-        ItemStack held = inventory.getSelected();
+        ItemStack held = inventory.getSelectedItem();
         if (ItemStack.isSameItemSameComponents(held, output)) {
             held.grow(output.split(held.getMaxStackSize() - held.getCount()).getCount());
         }
         inventory.setChanged();
-        this.player.connection.send(new ClientboundContainerSetSlotPacket(-2, 0, inventory.selected, held));
+        this.player.connection.send(new ClientboundContainerSetSlotPacket(-2, 0, inventory.getSelectedSlot(), held));
     }
 
     private void giveBack(ItemStack stack) {

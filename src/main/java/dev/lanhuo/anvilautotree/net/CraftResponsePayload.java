@@ -11,7 +11,7 @@ import net.minecraft.network.chat.ComponentSerialization;
 import net.minecraft.network.codec.ByteBufCodecs;
 import net.minecraft.network.codec.StreamCodec;
 import net.minecraft.network.protocol.common.custom.CustomPacketPayload;
-import net.minecraft.resources.ResourceLocation;
+import net.minecraft.resources.Identifier;
 
 /**
  * 服务端回执。
@@ -30,7 +30,7 @@ public record CraftResponsePayload(
     public static final int PHASE_ACCEPTED = 2;
     public static final int PHASE_GRID_FILLED = 3;
     public static final Type<CraftResponsePayload> TYPE = new Type<>(
-        ResourceLocation.fromNamespaceAndPath(AnvilAutoTree.MOD_ID, "craft_response")
+        Identifier.fromNamespaceAndPath(AnvilAutoTree.MOD_ID, "craft_response")
     );
     public static final StreamCodec<RegistryFriendlyByteBuf, CraftResponsePayload> STREAM_CODEC = StreamCodec.composite(
         ByteBufCodecs.BOOL,

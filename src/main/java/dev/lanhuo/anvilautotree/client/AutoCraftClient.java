@@ -13,12 +13,12 @@ import net.minecraft.client.gui.screens.Screen;
 import net.minecraft.client.gui.screens.inventory.AbstractContainerScreen;
 import net.minecraft.core.BlockPos;
 import net.minecraft.network.chat.Component;
-import net.minecraft.resources.ResourceLocation;
+import net.minecraft.resources.Identifier;
 import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.inventory.AbstractContainerMenu;
 import net.minecraft.world.item.crafting.RecipeHolder;
 import net.minecraft.world.item.crafting.StonecutterRecipe;
-import net.neoforged.neoforge.network.PacketDistributor;
+import net.neoforged.neoforge.client.network.ClientPacketDistributor;
 
 /**
  * 客户端侧的自动合成交互状态机。
@@ -42,7 +42,6 @@ public final class AutoCraftClient {
     private static boolean planFailed;
     private static boolean confirmed;
     private static boolean toGrid;
-    private static boolean plannedStonecutter;
     private static int quantity = 1;
     private static int requestSequence;
     private static int requestId;
@@ -93,7 +92,7 @@ public final class AutoCraftClient {
         pending = new Pending(container, transfer, recipe, source);
         requestId = ++requestSequence;
         sendPlan();
-        player.displayClientMessage(Component.translatable("anvilautotree.status.planning"), true);
+        player.sendOverlayMessage(Component.translatable("anvilautotree.status.planning"));
     }
 
     private static void sendPlan() {
@@ -109,7 +108,7 @@ public final class AutoCraftClient {
         replan();
     }
 
-    static void selectRecipePreference(String key, ResourceLocation selection) {
+    static void selectRecipePreference(String key, Identifier selection) {
         if (pending == null || confirmed) return;
         AutoCraftClientConfig.saveRecipePreference(key, selection);
         replan();
@@ -125,8 +124,8 @@ public final class AutoCraftClient {
     }
 
     private static void sendRequest(Optional<UUID> storageId) {
-        PacketDistributor.sendToServer(new CraftRequestPayload(
-            pending.source(), pending.recipe().id(), pending.recipe().value() instanceof StonecutterRecipe,
+        ClientPacketDistributor.sendToServer(new CraftRequestPayload(
+            pending.source(), pending.recipe().id().identifier(), pending.recipe().value() instanceof StonecutterRecipe,
             storageId, quantity, requestId, toGrid, AutoCraftClientConfig.recipePreferences()
         ));
     }
@@ -182,10 +181,7 @@ public final class AutoCraftClient {
             CraftTreeOverlay.LIVE.hide();
             Minecraft minecraft = Minecraft.getInstance();
             if (minecraft.player != null) {
-                minecraft.player.displayClientMessage(
-                    Component.translatable("anvilautotree.status.timeout"),
-                    false
-                );
+                minecraft.player.sendSystemMessage(Component.translatable("anvilautotree.status.timeout"));
             }
             cancel();
             return;
@@ -207,17 +203,17 @@ public final class AutoCraftClient {
             transferred = pending.transfer().test(player);
         } catch (RuntimeException exception) {
             AnvilAutoTree.LOGGER.warn("Unable to replay the registered JEI recipe transfer", exception);
-            player.displayClientMessage(Component.translatable("anvilautotree.status.replay_timeout"), false);
+            player.sendSystemMessage(Component.translatable("anvilautotree.status.replay_timeout"));
             clear();
             return;
         }
         if (transferred) {
-            player.displayClientMessage(Component.translatable("anvilautotree.status.done"), false);
+            player.sendSystemMessage(Component.translatable("anvilautotree.status.done"));
             clear();
             return;
         }
         if (++replayAttempts >= REPLAY_MAX_ATTEMPTS) {
-            player.displayClientMessage(Component.translatable("anvilautotree.status.replay_timeout"), false);
+            player.sendSystemMessage(Component.translatable("anvilautotree.status.replay_timeout"));
             clear();
             return;
         }
@@ -230,10 +226,6 @@ public final class AutoCraftClient {
         }
         waitTicks = -1;
         plannedStorage = payload.storage().id();
-        var level = Minecraft.getInstance().level;
-        plannedStonecutter = level != null && !payload.tree().isEmpty()
-            && payload.tree().getFirst().recipeId().flatMap(level.getRecipeManager()::byKey)
-                .map(holder -> holder.value() instanceof StonecutterRecipe).orElse(false);
         // 规划失败时也把树显示出来：缺失的物品会以红框节点出现，原因写在面板底部，
         // 不再只靠聊天栏文字提示。
         Component message = payload.success() ? null : payload.message();
@@ -258,7 +250,8 @@ public final class AutoCraftClient {
         waitTicks = -1;
         Minecraft minecraft = Minecraft.getInstance();
         if (minecraft.player != null) {
-            minecraft.player.displayClientMessage(payload.message(), !payload.success());
+            if (payload.success()) minecraft.player.sendSystemMessage(payload.message());
+            else minecraft.player.sendOverlayMessage(payload.message());
         }
         if (pending.pickBlock()) {
             cancel();
@@ -267,7 +260,7 @@ public final class AutoCraftClient {
         boolean gridFilled = payload.phase() == CraftResponsePayload.PHASE_GRID_FILLED;
         if (payload.success() && (gridFilled || toGrid || pending.transfer() == null) && minecraft.screen instanceof
             dev.dubhe.anvilcraft.client.gui.screen.StorageScreen screen && screen.getMenu() == pending.container()) {
-            screen.showCraftingAfterTransfer(gridFilled && plannedStonecutter);
+            StorageScreenAccess.showCrafting(screen);
         }
         if (!payload.success() || gridFilled || quantity > 1 || pending.transfer() == null) {
             clear();
@@ -288,7 +281,7 @@ public final class AutoCraftClient {
         toGrid = sendToGrid;
         sendRequest(plannedStorage);
         waitTicks = JOB_TIMEOUT;
-        minecraft.player.displayClientMessage(Component.translatable("anvilautotree.status.crafting"), true);
+        minecraft.player.sendOverlayMessage(Component.translatable("anvilautotree.status.crafting"));
     }
 
     private static void cancel() {
@@ -306,7 +299,6 @@ public final class AutoCraftClient {
         planFailed = false;
         confirmed = false;
         toGrid = false;
-        plannedStonecutter = false;
         quantity = 1;
         previewDelay = 0;
         replayDelay = -1;

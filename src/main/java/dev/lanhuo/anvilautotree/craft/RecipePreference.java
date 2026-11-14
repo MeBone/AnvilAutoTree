@@ -1,7 +1,7 @@
 package dev.lanhuo.anvilautotree.craft;
 
 import net.minecraft.core.registries.BuiltInRegistries;
-import net.minecraft.resources.ResourceLocation;
+import net.minecraft.resources.Identifier;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.crafting.Recipe;
 import net.minecraft.world.item.crafting.ShapedRecipe;
@@ -17,7 +17,7 @@ public final class RecipePreference {
         return "recipe/" + item(output);
     }
 
-    public static String ingredient(ResourceLocation recipe, int slot) {
+    public static String ingredient(Identifier recipe, int slot) {
         return "ingredient/" + recipe + "/" + slot;
     }
 
@@ -44,7 +44,7 @@ public final class RecipePreference {
         }
     }
 
-    public static ResourceLocation item(ItemStack stack) {
+    public static Identifier item(ItemStack stack) {
         return BuiltInRegistries.ITEM.getKey(stack.getItem());
     }
 }

@@ -1,6 +1,6 @@
 # AnvilCraft:AutoTree
 
-铁砧工艺的合成终端扩展，适用于 Minecraft 1.21.1、NeoForge 21.1.x、AnvilCraft 1.6.x 和 JEI。模组需同时安装在客户端和服务端。[下载最新版](https://github.com/MeBone/AnvilAutoTree/releases/latest)
+铁砧工艺的合成终端扩展，适用于 Minecraft 26.1.2、NeoForge 26.1.2.126 和 AnvilCraft 1.6.0+snapshot.2907，JEI 29.53.0.115 可选。模组需同时安装在客户端和服务端。[下载最新版](https://github.com/MeBone/AnvilAutoTree/releases/latest)
 
 ## 功能
 
@@ -23,3 +23,7 @@
 | `parallel` | 1024 | 超维每刻合成上限。潜影为超维的 1/12，板条箱为潜影的 1/12，向下取整，最低 1 次 |
 | `maxDepth` | 16 | 合成链最大深度 |
 | `maxSteps` | 256 | 单份合成计划的最大步骤数 |
+
+## 构建
+
+使用 Java 25 和 Gradle 9 运行 `gradle build`。使用本地实例构建时，在 UTF-8 文本文件中逐行列出 Minecraft patched JAR、NeoForge universal JAR、实例运行库、AnvilCraft、AnvilLib UI、AnvilLib Multiblock 和 JEI 的路径，并向 Gradle 传入 `-PlocalGameClasspath=<路径列表文件>`。

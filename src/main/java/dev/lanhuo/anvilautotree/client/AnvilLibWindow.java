@@ -2,7 +2,7 @@ package dev.lanhuo.anvilautotree.client;
 
 import dev.anvilcraft.lib.v2.ui.flexible.ButtonRenderer;
 import dev.anvilcraft.lib.v2.ui.flexible.FlyoutRenderer;
-import net.minecraft.client.gui.GuiGraphics;
+import net.minecraft.client.gui.GuiGraphicsExtractor;
 import net.minecraft.client.renderer.Rect2i;
 
 /** Keeps renderer scopes and their geometry for one crafting window. */
@@ -34,16 +34,16 @@ final class AnvilLibWindow {
         buttons[index].layout(bounds);
     }
 
-    void render(GuiGraphics graphics) {
+    void render(GuiGraphicsExtractor graphics) {
         draw(window, graphics);
     }
 
-    void renderButton(int index, GuiGraphics graphics, boolean enabled, boolean hovered, boolean selected) {
+    void renderButton(int index, GuiGraphicsExtractor graphics, boolean enabled, boolean hovered, boolean selected) {
         Button button = buttons[index];
         draw(!enabled ? button.disabled : selected ? button.selected : hovered ? button.hovered : button.normal, graphics);
     }
 
-    private static void draw(ButtonRenderer.Scope scope, GuiGraphics graphics) {
+    private static void draw(ButtonRenderer.Scope scope, GuiGraphicsExtractor graphics) {
         try {
             scope.graphics(graphics).render();
         } finally {

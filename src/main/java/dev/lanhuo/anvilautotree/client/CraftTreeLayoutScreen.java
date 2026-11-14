@@ -3,17 +3,17 @@ package dev.lanhuo.anvilautotree.client;
 import dev.lanhuo.anvilautotree.net.CraftNodePayload;
 import dev.lanhuo.anvilautotree.net.StorageKind;
 import java.util.List;
-import net.minecraft.client.gui.GuiGraphics;
+import net.minecraft.client.gui.GuiGraphicsExtractor;
 import net.minecraft.client.gui.components.Button;
 import net.minecraft.client.gui.screens.Screen;
 import net.minecraft.network.chat.CommonComponents;
 import net.minecraft.network.chat.Component;
-import net.minecraft.resources.ResourceLocation;
+import net.minecraft.resources.Identifier;
 import net.minecraft.world.item.Items;
 import org.lwjgl.glfw.GLFW;
 
 final class CraftTreeLayoutScreen extends Screen {
-    private static final ResourceLocation TERMINAL = ResourceLocation.fromNamespaceAndPath(
+    private static final Identifier TERMINAL = Identifier.fromNamespaceAndPath(
         "anvilcraft", "textures/gui/misc/background/storage_station.png"
     );
     private static final int TERMINAL_WIDTH = 300;
@@ -52,28 +52,26 @@ final class CraftTreeLayoutScreen extends Screen {
     }
 
     @Override
-    public void render(GuiGraphics graphics, int mouseX, int mouseY, float partialTick) {
+    public void extractRenderState(GuiGraphicsExtractor graphics, int mouseX, int mouseY, float partialTick) {
         graphics.fill(0, 0, width, height, 0xFF272831);
         if (minecraft.getResourceManager().getResource(TERMINAL).isPresent()) {
-            graphics.blit(TERMINAL, (width - TERMINAL_WIDTH) / 2, (height - TERMINAL_HEIGHT) / 2,
+            graphics.blit(net.minecraft.client.renderer.RenderPipelines.GUI_TEXTURED, TERMINAL, (width - TERMINAL_WIDTH) / 2, (height - TERMINAL_HEIGHT) / 2,
                 0, 0, TERMINAL_WIDTH, TERMINAL_HEIGHT, 512, 256);
         }
         preview.render(graphics, mouseX, mouseY);
         int toolbarY = positionToolbar();
-        graphics.pose().pushPose();
-        graphics.pose().translate(0, 0, 700);
+        graphics.nextStratum();
         graphics.fill(0, toolbarY, width, toolbarY + TOOLBAR_HEIGHT, 0xEE20212A);
         int hintY = toolbarY == 0 ? height - 12 : 4;
         var window = preview.extraAreas().getFirst();
         if (hintY + font.lineHeight <= window.getY() || hintY >= window.getY() + window.getHeight()) {
-            graphics.drawCenteredString(font, Component.translatable("anvilautotree.layout.hint"), width / 2, hintY, 0xFFFFFFFF);
+            graphics.centeredText(font, Component.translatable("anvilautotree.layout.hint"), width / 2, hintY, 0xFFFFFFFF);
         }
-        super.render(graphics, mouseX, mouseY, partialTick);
-        graphics.pose().popPose();
+        super.extractRenderState(graphics, mouseX, mouseY, partialTick);
     }
 
     @Override
-    public void renderBackground(GuiGraphics graphics, int mouseX, int mouseY, float partialTick) {
+    public void extractBackground(GuiGraphicsExtractor graphics, int mouseX, int mouseY, float partialTick) {
         // The terminal preview is already the background for this screen.
     }
 
@@ -90,27 +88,27 @@ final class CraftTreeLayoutScreen extends Screen {
     }
 
     @Override
-    public boolean mouseClicked(double mouseX, double mouseY, int button) {
-        return super.mouseClicked(mouseX, mouseY, button) || preview.mousePressed(mouseX, mouseY, button);
+    public boolean mouseClicked(net.minecraft.client.input.MouseButtonEvent event, boolean doubleClick) {
+        return super.mouseClicked(event, doubleClick) || preview.mousePressed(event.x(), event.y(), event.button());
     }
 
     @Override
-    public boolean mouseDragged(double mouseX, double mouseY, int button, double deltaX, double deltaY) {
-        return preview.mouseDragged(mouseX, mouseY, button) || super.mouseDragged(mouseX, mouseY, button, deltaX, deltaY);
+    public boolean mouseDragged(net.minecraft.client.input.MouseButtonEvent event, double deltaX, double deltaY) {
+        return preview.mouseDragged(event.x(), event.y(), event.button()) || super.mouseDragged(event, deltaX, deltaY);
     }
 
     @Override
-    public boolean mouseReleased(double mouseX, double mouseY, int button) {
-        return preview.mouseReleased(mouseX, mouseY, button) || super.mouseReleased(mouseX, mouseY, button);
+    public boolean mouseReleased(net.minecraft.client.input.MouseButtonEvent event) {
+        return preview.mouseReleased(event.x(), event.y(), event.button()) || super.mouseReleased(event);
     }
 
     @Override
-    public boolean keyPressed(int keyCode, int scanCode, int modifiers) {
-        if (keyCode == GLFW.GLFW_KEY_ENTER || keyCode == GLFW.GLFW_KEY_KP_ENTER) {
+    public boolean keyPressed(net.minecraft.client.input.KeyEvent event) {
+        if (event.key() == GLFW.GLFW_KEY_ENTER || event.key() == GLFW.GLFW_KEY_KP_ENTER) {
             saveLayout();
             return true;
         }
-        return super.keyPressed(keyCode, scanCode, modifiers);
+        return super.keyPressed(event);
     }
 
     private void saveLayout() {

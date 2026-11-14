@@ -11,13 +11,13 @@ import java.util.function.Consumer;
 import java.util.function.IntConsumer;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.Font;
-import net.minecraft.client.gui.GuiGraphics;
+import net.minecraft.client.gui.GuiGraphicsExtractor;
 import net.minecraft.client.gui.components.EditBox;
 import net.minecraft.client.gui.screens.Screen;
 import net.minecraft.client.renderer.Rect2i;
 import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.network.chat.Component;
-import net.minecraft.resources.ResourceLocation;
+import net.minecraft.resources.Identifier;
 import net.minecraft.util.FormattedCharSequence;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.Items;
@@ -63,16 +63,16 @@ public final class CraftTreeOverlay {
     private static final int BORDER_CRAFT = 0xFF8E560D;
     private static final int BORDER_SATISFIED = 0xFF316641;
     private static final int BORDER_MISSING = 0xFF9D2B35;
-    private static final ResourceLocation SLOT = ResourceLocation.fromNamespaceAndPath(
+    private static final Identifier SLOT = Identifier.fromNamespaceAndPath(
         "anvilcraft", "textures/gui/jei/slot_default.png"
     );
-    private static final ResourceLocation CLOSE = ResourceLocation.fromNamespaceAndPath(
+    private static final Identifier CLOSE = Identifier.fromNamespaceAndPath(
         "anvilcraft", "textures/gui/misc/storage_station/cancel.png"
     );
-    private static final ResourceLocation HYPERDIMENSION_ICON = ResourceLocation.fromNamespaceAndPath(
+    private static final Identifier HYPERDIMENSION_ICON = Identifier.fromNamespaceAndPath(
         "anvilcraft", "hyperdimension_terminal"
     );
-    private static final ResourceLocation SHULKER_ICON = ResourceLocation.fromNamespaceAndPath("anvilcraft", "shulker_container");
+    private static final Identifier SHULKER_ICON = Identifier.fromNamespaceAndPath("anvilcraft", "shulker_container");
     private static final int SCROLL_BAR_THICKNESS = 5;
     /** 滚动条的点击/拖动判定带宽，比画出来的条更宽，方便抓。 */
     private static final int SCROLL_BAR_HIT = 7;
@@ -86,7 +86,7 @@ public final class CraftTreeOverlay {
     private static final Theme SHULKER = new Theme(
         "anvilautotree.gui.title.shulker", 0xFFC9B7CB, 0xFFD0A5CB, 0xFFF1D7EC, 0xFF8D6287, 0xFFB09CAF, 0xFFE0B7DB
     );
-    private static final ResourceLocation CRATE_ICON = ResourceLocation.fromNamespaceAndPath("anvilcraft", "large_crate");
+    private static final Identifier CRATE_ICON = Identifier.fromNamespaceAndPath("anvilcraft", "large_crate");
     private static final Theme CRATE = new Theme(
         "anvilautotree.gui.title.crate", 0xFFCFB595, 0xFFD8AD77, 0xFFF1D3AA, 0xFF8A603B, 0xFFAD9478, 0xFFE9C18C
     );
@@ -304,16 +304,16 @@ public final class CraftTreeOverlay {
                     tryConfirm(false);
                 }
             }
-            default -> quantityInput.keyPressed(key, scanCode, modifiers);
+            default -> quantityInput.keyPressed(new net.minecraft.client.input.KeyEvent(key, scanCode, modifiers));
         }
         return true;
     }
 
-    public boolean quantityCharTyped(char character, int modifiers) {
+    public boolean quantityCharTyped(int character) {
         if (!editingQuantity()) {
             return false;
         }
-        quantityInput.charTyped(character, modifiers);
+        quantityInput.charTyped(new net.minecraft.client.input.CharacterEvent(character));
         return true;
     }
 
@@ -380,7 +380,7 @@ public final class CraftTreeOverlay {
     /**
      * 在界面绘制完成之后叠加绘制面板。
      */
-    public void render(GuiGraphics graphics, int mouseX, int mouseY) {
+    public void render(GuiGraphicsExtractor graphics, int mouseX, int mouseY) {
         if (!active()) {
             return;
         }
@@ -394,8 +394,7 @@ public final class CraftTreeOverlay {
         List<FormattedCharSequence> statusLines = statusLines(font);
         int viewHeight = viewHeight(statusLines.size());
 
-        graphics.pose().pushPose();
-        graphics.pose().translate(0, 0, 300);
+        graphics.nextStratum();
         if (windowChrome != null) {
             windowChrome.render(graphics);
         } else {
@@ -410,13 +409,13 @@ public final class CraftTreeOverlay {
             case SHULKER -> BuiltInRegistries.ITEM.getOptional(SHULKER_ICON).orElse(Items.SHULKER_SHELL);
             case LARGE_CRATE -> BuiltInRegistries.ITEM.getOptional(CRATE_ICON).orElse(Items.BARREL);
         }).getDefaultInstance();
-        graphics.renderItem(storageIcon, viewX + 4, panelY + 8);
+        graphics.item(storageIcon, viewX + 4, panelY + 8);
         int titleX = viewX + 23;
         String title = fitLabel(font, Component.translatable(theme.title()), closeX - titleX - 7);
-        graphics.drawString(font, title, titleX, panelY + 12, INK, false);
+        graphics.text(font, title, titleX, panelY + 12, INK, false);
         boolean closeHovered = inRect(mouseX, mouseY, closeX, panelY + PADDING, CLOSE_WIDTH, CLOSE_HEIGHT);
         if (minecraft.getResourceManager().getResource(CLOSE).isPresent()) {
-            graphics.blit(CLOSE, closeX, panelY + PADDING, 0, closeHovered ? CLOSE_HEIGHT : 0, CLOSE_WIDTH, CLOSE_HEIGHT, 18, 40);
+            graphics.blit(net.minecraft.client.renderer.RenderPipelines.GUI_TEXTURED, CLOSE, closeX, panelY + PADDING, 0, closeHovered ? CLOSE_HEIGHT : 0, CLOSE_WIDTH, CLOSE_HEIGHT, 18, 40);
         } else {
             bevel(graphics, closeX, panelY + PADDING, CLOSE_WIDTH, CLOSE_HEIGHT,
                 closeHovered ? theme.hover() : SILVER, LIGHT_EDGE, DARK_EDGE);
@@ -439,12 +438,12 @@ public final class CraftTreeOverlay {
         int legendY = viewY + viewHeight + 5;
         renderLegend(graphics, font, viewX, legendY, viewWidth);
         for (int index = 0; index < statusLines.size(); index++) {
-            graphics.drawString(font, statusLines.get(index), viewX, legendY + LEGEND_HEIGHT + index * 10,
+            graphics.text(font, statusLines.get(index), viewX, legendY + LEGEND_HEIGHT + index * 10,
                 planning ? INK : BORDER_MISSING, false);
         }
         if (status != null && !planning && inRect(mouseX, mouseY,
             viewX, legendY + LEGEND_HEIGHT, viewWidth, statusLines.size() * 10)) {
-            graphics.renderTooltip(font, status, mouseX, mouseY);
+            graphics.setTooltipForNextFrame(font, status, mouseX, mouseY);
         }
 
         renderFooter(graphics, font, mouseX, mouseY);
@@ -453,13 +452,12 @@ public final class CraftTreeOverlay {
             renderTooltip(graphics, font, mouseX, mouseY, viewX, viewY, viewWidth, viewHeight);
         }
         if (recipeChoices != null) recipeChoices.render(graphics, mouseX, mouseY);
-        graphics.pose().popPose();
     }
 
     /**
      * 右下角画三道斜线，提示这里可以拖动改变窗口尺寸。
      */
-    private void renderResizeGrip(GuiGraphics graphics) {
+    private void renderResizeGrip(GuiGraphicsExtractor graphics) {
         int right = panelX + panelWidth - 2;
         int bottom = panelY + panelHeight - 3;
         for (int length = 2; length <= 6; length += 2) {
@@ -468,14 +466,14 @@ public final class CraftTreeOverlay {
         }
     }
 
-    private static void bevel(GuiGraphics graphics, int x, int y, int width, int height, int fill, int top, int bottom) {
+    private static void bevel(GuiGraphicsExtractor graphics, int x, int y, int width, int height, int fill, int top, int bottom) {
         graphics.fill(x, y, x + width, y + height, OUTLINE);
         graphics.fill(x + 1, y + 1, x + width - 1, y + height - 1, top);
         graphics.fill(x + 2, y + 2, x + width - 1, y + height - 1, bottom);
         graphics.fill(x + 2, y + 2, x + width - 2, y + height - 2, fill);
     }
 
-    private void renderLegend(GuiGraphics graphics, Font font, int x, int y, int width) {
+    private void renderLegend(GuiGraphicsExtractor graphics, Font font, int x, int y, int width) {
         Component stored = Component.translatable("anvilautotree.gui.legend_stored");
         Component craft = Component.translatable("anvilautotree.gui.legend_craft");
         Component missing = Component.translatable("anvilautotree.gui.legend_missing");
@@ -488,9 +486,9 @@ public final class CraftTreeOverlay {
         }
     }
 
-    private static int drawLegendEntry(GuiGraphics graphics, Font font, Component label, int x, int y, int color) {
+    private static int drawLegendEntry(GuiGraphicsExtractor graphics, Font font, Component label, int x, int y, int color) {
         graphics.fill(x, y + 1, x + 6, y + 7, color);
-        graphics.drawString(font, label, x + 9, y, INK, false);
+        graphics.text(font, label, x + 9, y, INK, false);
         return x + 16 + font.width(label);
     }
 
@@ -529,7 +527,7 @@ public final class CraftTreeOverlay {
         return minecraft.screen != null && !isJeiScreen(minecraft.screen);
     }
 
-    private void renderTree(GuiGraphics graphics, int viewX, int viewY, int viewWidth, int viewHeight) {
+    private void renderTree(GuiGraphicsExtractor graphics, int viewX, int viewY, int viewWidth, int viewHeight) {
         double maxScrollX = maxScrollX(viewWidth);
         double maxScrollY = maxScrollY(viewHeight);
         scrollX = clamp(scrollX, 0.0D, maxScrollX);
@@ -541,15 +539,15 @@ public final class CraftTreeOverlay {
         lastOriginY = originY;
 
         graphics.enableScissor(viewX, viewY, viewX + viewWidth, viewY + viewHeight);
-        graphics.pose().pushPose();
-        graphics.pose().translate(originX, originY, 0.0F);
-        graphics.pose().scale(scale, scale, 1.0F);
+        graphics.pose().pushMatrix();
+        graphics.pose().translate((float) originX, (float) originY);
+        graphics.pose().scale(scale, scale);
         renderLines(graphics);
         boolean hasSlotTexture = Minecraft.getInstance().getResourceManager().getResource(SLOT).isPresent();
         for (int index = 0; index < nodes.size(); index++) {
             renderNode(graphics, index, hasSlotTexture);
         }
-        graphics.pose().popPose();
+        graphics.pose().popMatrix();
         graphics.disableScissor();
 
         renderScrollBars(graphics, viewX, viewY, viewWidth, viewHeight, maxScrollX, maxScrollY);
@@ -558,7 +556,7 @@ public final class CraftTreeOverlay {
         graphics.disableScissor();
     }
 
-    private void renderLines(GuiGraphics graphics) {
+    private void renderLines(GuiGraphicsExtractor graphics) {
         int thickness = (int) Math.ceil(1.0F / scale);
         for (Map.Entry<Integer, List<Integer>> entry : children.entrySet()) {
             int[] parent = positions.get(entry.getKey());
@@ -584,27 +582,27 @@ public final class CraftTreeOverlay {
         }
     }
 
-    private void renderNode(GuiGraphics graphics, int index, boolean hasSlotTexture) {
+    private void renderNode(GuiGraphicsExtractor graphics, int index, boolean hasSlotTexture) {
         int[] position = positions.get(index);
         if (position == null) {
             return;
         }
         CraftNodePayload node = nodes.get(index);
-        graphics.renderOutline(position[0], position[1], NODE, NODE, borderColor(node));
+        graphics.outline(position[0], position[1], NODE, NODE, borderColor(node));
         if (hasSlotTexture) {
-            graphics.blit(SLOT, position[0] + 1, position[1] + 1, 0, 0, 18, 18, 18, 18);
+            graphics.blit(net.minecraft.client.renderer.RenderPipelines.GUI_TEXTURED, SLOT, position[0] + 1, position[1] + 1, 0, 0, 18, 18, 18, 18);
         } else {
             bevel(graphics, position[0] + 1, position[1] + 1, 18, 18, 0xFF8B8B8B, DARK_EDGE, LIGHT_EDGE);
         }
-        graphics.renderItem(node.stack(), position[0] + 2, position[1] + 2);
+        graphics.item(node.stack(), position[0] + 2, position[1] + 2);
     }
 
-    private void renderCounts(GuiGraphics graphics, int originX, int originY) {
+    private void renderCounts(GuiGraphicsExtractor graphics, int originX, int originY) {
         Font font = Minecraft.getInstance().font;
-        graphics.pose().pushPose();
+        graphics.pose().pushMatrix();
         // Item models write depth. Draw the count in front of them, like a slot decoration.
-        graphics.pose().translate(originX, originY, 250);
-        graphics.pose().scale(scale, scale, 1.0F);
+        graphics.pose().translate((float) originX, (float) originY);
+        graphics.pose().scale(scale, scale);
         for (int index = 0; index < nodes.size(); index++) {
             int[] position = positions.get(index);
             if (position == null) {
@@ -613,13 +611,13 @@ public final class CraftTreeOverlay {
             String label = Long.toString(nodes.get(index).required());
             int width = font.width(label);
             float textScale = Math.min(1.0F, (NODE - 2) / (float) width);
-            graphics.pose().pushPose();
-            graphics.pose().translate(position[0] + NODE - 1, position[1] + NODE - 1, 0);
-            graphics.pose().scale(textScale, textScale, 1.0F);
-            graphics.drawString(font, label, -width, -8, 0xFFFFFFFF, true);
-            graphics.pose().popPose();
+            graphics.pose().pushMatrix();
+            graphics.pose().translate(position[0] + NODE - 1, position[1] + NODE - 1);
+            graphics.pose().scale(textScale, textScale);
+            graphics.text(font, label, -width, -8, 0xFFFFFFFF, true);
+            graphics.pose().popMatrix();
         }
-        graphics.pose().popPose();
+        graphics.pose().popMatrix();
     }
 
     private static int borderColor(CraftNodePayload node) {
@@ -637,7 +635,7 @@ public final class CraftTreeOverlay {
     }
 
     private void renderTooltip(
-        GuiGraphics graphics,
+        GuiGraphicsExtractor graphics,
         Font font,
         int mouseX,
         int mouseY,
@@ -663,7 +661,7 @@ public final class CraftTreeOverlay {
         } else if (!isMissing(node) && node.crafts() > 0) {
             lines.add(Component.translatable("anvilautotree.gui.node_crafts", node.crafts()));
         }
-        graphics.renderTooltip(font, lines, Optional.empty(), mouseX, mouseY);
+        graphics.setTooltipForNextFrame(font, lines, Optional.empty(), mouseX, mouseY);
     }
 
     public ItemStack itemAt(double mouseX, double mouseY) {
@@ -725,7 +723,7 @@ public final class CraftTreeOverlay {
     }
 
     private void renderScrollBars(
-        GuiGraphics graphics,
+        GuiGraphicsExtractor graphics,
         int viewX,
         int viewY,
         int viewWidth,
@@ -761,11 +759,11 @@ public final class CraftTreeOverlay {
         return Math.max(12, (int) Math.min(viewWidth, viewWidth * (long) viewWidth / total));
     }
 
-    private void renderFooter(GuiGraphics graphics, Font font, int mouseX, int mouseY) {
+    private void renderFooter(GuiGraphicsExtractor graphics, Font font, int mouseX, int mouseY) {
         renderButton(graphics, font, structurePacking ? "anvilautotree.gui.structure_pack" : "anvilautotree.gui.confirm",
             footer.confirm(), mouseX, mouseY, !layoutPreview && confirmEnabled && validQuantityInput && !busy, false,
             0);
-        quantityInput.render(graphics, mouseX, mouseY, 0);
+        quantityInput.extractRenderState(graphics, mouseX, mouseY, 0);
         renderButton(graphics, font, onlyMissing ? "anvilautotree.gui.filter_all" : "anvilautotree.gui.filter_only",
             footer.filter(), mouseX, mouseY, !layoutPreview, onlyMissing, 1);
         renderButton(graphics, font, "anvilautotree.gui.cancel", footer.cancel(), mouseX, mouseY, !layoutPreview, false,
@@ -773,7 +771,7 @@ public final class CraftTreeOverlay {
         if (recipeChoices != null) return;
         if (!layoutPreview && inRect(mouseX, mouseY, footer.quantity())) {
             if (!storageKind.supportsBatch()) {
-                graphics.renderTooltip(font, Component.translatable("anvilautotree.error.crate_single_only"), mouseX, mouseY);
+                graphics.setTooltipForNextFrame(font, Component.translatable("anvilautotree.error.crate_single_only"), mouseX, mouseY);
             } else {
                 String hint = structurePacking ? "anvilautotree.gui.structure_quantity_hint" : "anvilautotree.gui.quantity_hint";
                 List<Component> lines = new ArrayList<>();
@@ -784,16 +782,16 @@ public final class CraftTreeOverlay {
                         lines.add(Component.translatable("anvilautotree.gui.quantity_rounded", output));
                     }
                 }
-                graphics.renderTooltip(font, lines, Optional.empty(), mouseX, mouseY);
+                graphics.setTooltipForNextFrame(font, lines, Optional.empty(), mouseX, mouseY);
             }
         } else if (!layoutPreview && inRect(mouseX, mouseY, footer.confirm())) {
             if (canSendToGrid()) {
-                graphics.renderTooltip(font, List.of(
+                graphics.setTooltipForNextFrame(font, List.of(
                     Component.translatable("anvilautotree.gui.batch_hint"),
                     Component.translatable("anvilautotree.gui.batch_grid_hint")), Optional.empty(), mouseX, mouseY);
                 return;
             }
-            graphics.renderTooltip(font, Component.translatable(
+            graphics.setTooltipForNextFrame(font, Component.translatable(
                 structurePacking
                     ? (pickBlock ? "anvilautotree.gui.structure_inventory_hint" : "anvilautotree.gui.structure_pack_hint")
                     : (pickBlock ? "anvilautotree.gui.pick_hint"
@@ -807,7 +805,7 @@ public final class CraftTreeOverlay {
     }
 
     private void renderButton(
-        GuiGraphics graphics, Font font, String key, Rect2i bounds,
+        GuiGraphicsExtractor graphics, Font font, String key, Rect2i bounds,
         int mouseX, int mouseY, boolean enabled, boolean selected, int index
     ) {
         int x = bounds.getX();
@@ -831,9 +829,9 @@ public final class CraftTreeOverlay {
         drawCenteredLabel(graphics, font, Component.translatable(key), x, y + 5, width, enabled ? INK : DARK_EDGE);
     }
 
-    private static void drawCenteredLabel(GuiGraphics graphics, Font font, Component label, int x, int y, int width, int color) {
+    private static void drawCenteredLabel(GuiGraphicsExtractor graphics, Font font, Component label, int x, int y, int width, int color) {
         String text = fitLabel(font, label, width - 6);
-        graphics.drawString(font, text, x + (width - font.width(text)) / 2, y, color, false);
+        graphics.text(font, text, x + (width - font.width(text)) / 2, y, color, false);
     }
 
     private static String fitLabel(Font font, Component label, int width) {
@@ -887,7 +885,7 @@ public final class CraftTreeOverlay {
             }
             boolean alreadyFocused = quantityInput.isFocused();
             quantityInput.setFocused(true);
-            quantityInput.mouseClicked(mouseX, mouseY, button);
+            quantityInput.mouseClicked(new net.minecraft.client.input.MouseButtonEvent(mouseX, mouseY, new net.minecraft.client.input.MouseButtonInfo(button, 0)), false);
             if (!alreadyFocused) {
                 quantityInput.setCursorPosition(quantityInput.getValue().length());
                 quantityInput.setHighlightPos(0);
@@ -935,7 +933,7 @@ public final class CraftTreeOverlay {
         }
         if (mouseY >= panelY + panelHeight - FOOTER) {
             if (inRect(mouseX, mouseY, footer.confirm()) && validBeforeClick) {
-                tryConfirm(Screen.hasShiftDown() && canSendToGrid());
+                tryConfirm(net.minecraft.client.Minecraft.getInstance().hasShiftDown() && canSendToGrid());
             } else if (inRect(mouseX, mouseY, footer.filter())) {
                 toggleOnlyMissing();
             } else if (inRect(mouseX, mouseY, footer.cancel())) {
@@ -1139,7 +1137,7 @@ public final class CraftTreeOverlay {
         if (!inRect(mouseX, mouseY, viewX, viewY, viewWidth, viewHeight)) {
             return false;
         }
-        if (Screen.hasControlDown()) {
+        if (net.minecraft.client.Minecraft.getInstance().hasControlDown()) {
             double treeX = (mouseX - viewX - axisOffset(viewWidth, contentWidth, scrollX)) / scale;
             double treeY = (mouseY - viewY - axisOffset(viewHeight, contentHeight, scrollY)) / scale;
             float factor = deltaY > 0.0D ? ZOOM_STEP : 1.0F / ZOOM_STEP;
@@ -1149,7 +1147,7 @@ public final class CraftTreeOverlay {
             scrollY = clamp(treeY - (mouseY - viewY) / scale, 0.0D, maxScrollY(viewHeight));
             return true;
         }
-        if (horizontal || Screen.hasShiftDown() || maxScrollY(viewHeight) <= 0.5D) {
+        if (horizontal || net.minecraft.client.Minecraft.getInstance().hasShiftDown() || maxScrollY(viewHeight) <= 0.5D) {
             scrollX = clamp(scrollX - deltaY * 12.0D / scale, 0.0D, maxScrollX(viewWidth));
         } else {
             scrollY = clamp(scrollY - deltaY * 12.0D / scale, 0.0D, maxScrollY(viewHeight));

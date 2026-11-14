@@ -13,7 +13,7 @@ import mezz.jei.api.registration.IAdvancedRegistration;
 import mezz.jei.api.registration.IGuiHandlerRegistration;
 import mezz.jei.api.runtime.IJeiRuntime;
 import net.minecraft.client.renderer.Rect2i;
-import net.minecraft.resources.ResourceLocation;
+import net.minecraft.resources.Identifier;
 
 /**
  * JEI 适配：把合成树侧边栏占用的区域告诉 JEI。
@@ -24,17 +24,30 @@ import net.minecraft.resources.ResourceLocation;
  */
 @JeiPlugin
 public final class AutoCraftJeiPlugin implements IModPlugin {
-    private static final ResourceLocation UID =
-        ResourceLocation.fromNamespaceAndPath(AnvilAutoTree.MOD_ID, "jei_plugin");
+    private static final Identifier UID =
+        Identifier.fromNamespaceAndPath(AnvilAutoTree.MOD_ID, "jei_plugin");
     private static boolean recipeButtonRegistered;
-    private IJeiRuntime runtime;
+    private static IJeiRuntime runtime;
 
     static boolean hasRecipeButton() {
         return recipeButtonRegistered;
     }
 
+    public static boolean bookmark(net.minecraft.client.input.KeyEvent event) {
+        var jei = runtime;
+        if (jei == null || !jei.getKeyMappings().getBookmark().isActiveAndMatches(
+            com.mojang.blaze3d.platform.InputConstants.getKey(event))) return false;
+        var minecraft = net.minecraft.client.Minecraft.getInstance();
+        var stack = CraftTreeOverlay.LIVE.itemAt(minecraft.mouseHandler.getScaledXPos(minecraft.getWindow()),
+            minecraft.mouseHandler.getScaledYPos(minecraft.getWindow()));
+        if (stack.isEmpty()) return false;
+        jei.getIngredientManager().createTypedIngredient(stack, true)
+            .ifPresent(jei.getBookmarkManager()::add);
+        return true;
+    }
+
     @Override
-    public ResourceLocation getPluginUid() {
+    public Identifier getPluginUid() {
         return UID;
     }
 
@@ -50,7 +63,7 @@ public final class AutoCraftJeiPlugin implements IModPlugin {
 
     @Override
     public void onRuntimeAvailable(IJeiRuntime runtime) {
-        this.runtime = runtime;
+        AutoCraftJeiPlugin.runtime = runtime;
     }
 
     @Override

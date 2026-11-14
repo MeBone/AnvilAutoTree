@@ -1,7 +1,7 @@
 package dev.lanhuo.anvilautotree.craft;
 
 import java.util.List;
-import net.minecraft.resources.ResourceLocation;
+import net.minecraft.resources.Identifier;
 import net.minecraft.world.item.ItemStack;
 
 /**
@@ -15,7 +15,7 @@ import net.minecraft.world.item.ItemStack;
  * @param stonecutter 是否来自切石机配方
  * @param recipeId 配方标识，仅用于日志与提示
  */
-public record CraftStep(List<IngredientChoice> ingredients, ItemStack output, int crafts, boolean stonecutter, ResourceLocation recipeId) {
+public record CraftStep(List<IngredientChoice> ingredients, ItemStack output, int crafts, boolean stonecutter, Identifier recipeId) {
     public CraftStep {
         ingredients = List.copyOf(ingredients);
         if (crafts <= 0) {
