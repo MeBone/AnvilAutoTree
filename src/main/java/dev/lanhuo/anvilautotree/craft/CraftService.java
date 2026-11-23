@@ -72,7 +72,8 @@ public final class CraftService {
             fail(player, payload, "anvilautotree.error.batch_grid_unsupported", kind);
             return;
         }
-        StorageAccess stock = new ItemHandlerStorageAccess(storage.getItems());
+        StorageAccess stock = new ItemHandlerStorageAccess(storage.getItems(),
+            kind == StorageKind.HYPERDIMENSION ? storage.getId() : null);
         var result = RecipeData.result(recipe.value(), level);
         if (payload.pickBlock() && !result.isEmpty() && stock.count(result) > 0) {
             fail(player, payload, "anvilautotree.error.pick_stock", kind);

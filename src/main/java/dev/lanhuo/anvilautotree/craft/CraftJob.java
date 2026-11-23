@@ -156,6 +156,17 @@ public final class CraftJob {
                 return false;
             }
         }
+        if (step.fill() != null) {
+            if (!step.fill().drain(crafts)) {
+                for (var stack : consumed) deliverOutput(stack, stack.getCount(), false);
+                return false;
+            }
+        } else {
+            for (var ingredient : step.ingredients()) {
+                var remainder = FluidFill.remainder(ingredient.key().proto());
+                if (!remainder.isEmpty()) deliverOutput(remainder, remainder.getCount() * ingredient.perCraft() * crafts, false);
+            }
+        }
         this.insertOutput(step, crafts);
         return true;
     }

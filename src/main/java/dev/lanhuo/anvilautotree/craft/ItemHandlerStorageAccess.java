@@ -9,8 +9,18 @@ public final class ItemHandlerStorageAccess implements StorageAccess {
     private final UnlimitedItemStacksResourceHandler handler;
 
     public ItemHandlerStorageAccess(UnlimitedItemStacksResourceHandler handler) {
+        this(handler, null);
+    }
+
+    private final java.util.UUID fluidStorageId;
+
+    public ItemHandlerStorageAccess(UnlimitedItemStacksResourceHandler handler, java.util.UUID fluidStorageId) {
+        this.fluidStorageId = fluidStorageId;
         this.handler = handler;
     }
+
+    @Override
+    public java.util.UUID fluidStorageId() { return fluidStorageId; }
 
     @Override
     public long count(ItemStack proto) {

@@ -112,7 +112,9 @@ final class JeiAutoCraftButtons {
             }
             AbstractContainerMenu menu = screen.getMenu();
             var handler = jei.getRecipeTransferManager().getRecipeTransferHandler(menu, layout.getRecipeCategory()).orElse(null);
-            return handler instanceof StorageRecipeTransfer<AbstractContainerMenu, R> transfer ? new Target<>(menu, transfer) : null;
+            if (handler == null) return null;
+            var wrapped = StorageRecipeTransfer.wrap(menu, layout.getRecipeCategory().getRecipeType(), handler);
+            return wrapped instanceof StorageRecipeTransfer<AbstractContainerMenu, R> transfer ? new Target<>(menu, transfer) : null;
         }
     }
 

@@ -15,7 +15,12 @@ import net.minecraft.world.item.ItemStack;
  * @param stonecutter 是否来自切石机配方
  * @param recipeId 配方标识，仅用于日志与提示
  */
-public record CraftStep(List<IngredientChoice> ingredients, ItemStack output, int crafts, boolean stonecutter, Identifier recipeId) {
+public record CraftStep(List<IngredientChoice> ingredients, ItemStack output, int crafts, boolean stonecutter, Identifier recipeId,
+                        FluidFill fill) {
+    public CraftStep(List<IngredientChoice> ingredients, ItemStack output, int crafts, boolean stonecutter, Identifier recipeId) {
+        this(ingredients, output, crafts, stonecutter, recipeId, null);
+    }
+
     public CraftStep {
         ingredients = List.copyOf(ingredients);
         if (crafts <= 0) {
