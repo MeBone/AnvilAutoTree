@@ -1,0 +1,13 @@
+## 超维流体灌装
+
+- 超维存储现在可以用连接的流体端口补齐配方需要的桶装或瓶装原料。已有成品优先，其次使用空铁桶或玻璃瓶灌装，空容器不足时会尝试合成。
+- 制作一个蛋糕需要 3000 mB 牛奶，合成后返还 3 个空桶。玻璃瓶装水每瓶消耗 250 mB。批量订单会先备齐整批所需容器。
+
+## Hyperdimensional fluid crafting
+
+- Crafting trees can now fill buckets and supported bottles from connected fluid ports. Orders use filled containers from storage first and can craft missing empty containers.
+- A cake uses 3,000 mB of milk and returns three empty buckets. A water bottle uses 250 mB of water. Batch orders prepare the containers for the entire batch up front.
+
+Minecraft 1.21.1 · NeoForge · Tested with AnvilCraft 1.6.0+snapshot.2890
+
+部分代码和发布说明由生成式 AI 编写。Generative AI contributed to the implementation and release notes.

@@ -21,6 +21,9 @@ public final class InventoryAwareStorageAccess implements StorageAccess {
     }
 
     @Override
+    public java.util.UUID fluidStorageId() { return delegate.fluidStorageId(); }
+
+    @Override
     public long count(ItemStack stack) {
         return this.delegate.count(stack) + this.countInInventory(stack);
     }

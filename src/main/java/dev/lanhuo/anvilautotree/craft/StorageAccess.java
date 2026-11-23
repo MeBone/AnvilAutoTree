@@ -9,6 +9,8 @@ public interface StorageAccess {
     /**
      * 统计存储中指定物品的总数量。
      */
+    default java.util.UUID fluidStorageId() { return null; }
+
     long count(ItemStack proto);
 
     /**

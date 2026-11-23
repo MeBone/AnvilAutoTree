@@ -38,6 +38,7 @@ import net.minecraft.world.item.crafting.StonecutterRecipe;
 public final class CraftPlanner {
     private static final int MAX_CRAFTS_PER_STEP = 100_000;
 
+    private final List<FluidFill> fills;
     private final ServerLevel level;
     private final StorageAccess storage;
     private final Map<String, ResourceLocation> preferences;
@@ -51,6 +52,7 @@ public final class CraftPlanner {
     private CraftPlanner(ServerLevel level, StorageAccess storage, Map<String, ResourceLocation> preferences) {
         this.level = level;
         this.storage = storage;
+        this.fills = FluidFill.options(storage.fluidStorageId());
         this.preferences = preferences;
     }
 
@@ -173,11 +175,21 @@ public final class CraftPlanner {
     }
 
     private <T extends RecipeInput> ItemStack assembleBatch(Recipe<T> recipe, T input) {
-        if (!recipe.matches(input, this.level) || recipe.getRemainingItems(input).stream().anyMatch(stack -> !stack.isEmpty())) {
-            return ItemStack.EMPTY;
+        if (!recipe.matches(input, this.level)) return ItemStack.EMPTY;
+        var remainders = recipe.getRemainingItems(input);
+        for (int i = 0; i < input.size(); i++) {
+            var expected = input.getItem(i).getCraftingRemainingItem();
+            if (!ItemStack.matches(expected, remainders.get(i))) return ItemStack.EMPTY;
+            if (!expected.isEmpty() && !isFluidContainerRemainder(expected)) return ItemStack.EMPTY;
         }
         return recipe.assemble(input, this.level.registryAccess());
     }
+
+    private boolean isFluidContainerRemainder(ItemStack stack) {
+        return storage.fluidStorageId() != null && (stack.is(net.minecraft.world.item.Items.BUCKET)
+            || stack.is(net.minecraft.world.item.Items.GLASS_BOTTLE));
+    }
+
 
     /**
      * 把「每个槽位一条原料」合并成「每种物品每轮合成需要多少」，避免同一物品占多个槽时缺口被重复计算。
@@ -223,8 +235,32 @@ public final class CraftPlanner {
         }
         this.path.addLast(key);
         try {
+            MissingRecipeException fillFailure = null;
+            for (var fill : fills) {
+                if (!ItemStack.isSameItemSameComponents(fill.result(), key.proto()) || missing > MAX_CRAFTS_PER_STEP) continue;
+                long used = 0;
+                for (var step : steps) {
+                    if (step.fill() != null && net.neoforged.neoforge.fluids.FluidStack.isSameFluidSameComponents(
+                        step.fill().fluid(), fill.fluid())) used += (long) step.fill().fluid().getAmount() * step.crafts();
+                }
+                if (missing * fill.fluid().getAmount() > fill.available() - used) continue;
+                Snapshot before = snapshot();
+                try {
+                    var container = StackKey.of(fill.container());
+                    var child = ensure(container, missing);
+                    if (steps.size() >= AutoCraftConfig.MAX_STEPS.get()) throw new TooComplexException();
+                    produced.merge(key, missing, Long::sum);
+                    steps.add(new CraftStep(List.of(new IngredientChoice(container, 1)), key.proto(), (int) missing,
+                        false, ResourceLocation.fromNamespaceAndPath("anvilautotree", "fluid_filling"), fill));
+                    return new CraftTreeNode(key.proto(), required, stored, (int) missing, false, List.of(child), Optional.empty());
+                } catch (MissingRecipeException exception) {
+                    restore(before);
+                    fillFailure = exception;
+                }
+            }
             List<Candidate> candidates = this.candidatesOf(key);
             if (candidates.isEmpty()) {
+                if (fillFailure != null) throw fillFailure;
                 throw MissingRecipeException.leaf(key, false, required, stored);
             }
             var preference = this.preferences.get(RecipePreference.recipe(key.proto()));
@@ -365,7 +401,7 @@ public final class CraftPlanner {
         ItemStack best = ItemStack.EMPTY;
         long bestAmount = -1L;
         for (ItemStack option : options) {
-            if (requireNoRemainder && option.hasCraftingRemainingItem()) {
+            if (requireNoRemainder && option.hasCraftingRemainingItem() && !isFluidContainerRemainder(option.getCraftingRemainingItem())) {
                 continue;
             }
             if (RecipePreference.item(option).equals(preferredItem)) return option;
